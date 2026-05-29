@@ -193,8 +193,12 @@ function renderCalc(question, index) {
   return `${index}. ${question.question}`;
 }
 
+function ensureSentenceEnding(text) {
+  return /[。！？!?；;]$/.test(text) ? text : `${text}。`;
+}
+
 function renderEssay(question, index) {
-  return `${index}. ${question.question}`;
+  return `${index}. ${ensureSentenceEnding(question.question)}`;
 }
 
 function sectionTotal(count, score) {
