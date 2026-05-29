@@ -2337,7 +2337,7 @@ const data: import("../types/quiz-bank").QuizBank = {
             "prompt": "线性回归损失计算"
         },
         {
-            "question": "设一元线性回归模型为 $\\hat{y}=wx+b$，其中 $w=1$，$b=0$。给定单个样本 $(x,y)=(2,5)$，学习率 $\eta=0.1$，损失函数取 $L=\\frac{1}{2}(\\hat{y}-y)^2$。试计算进行 1 次梯度下降后的参数 $w$ 和 $b$。",
+            "question": "设一元线性回归模型为 $\\hat{y}=wx+b$，其中 $w=1$，$b=0$。给定单个样本 $(x,y)=(2,5)$，学习率 $\\eta=0.1$，损失函数取 $L=\\frac{1}{2}(\\hat{y}-y)^2$。试计算进行 1 次梯度下降后的参数 $w$ 和 $b$。",
             "difficulty": "难",
             "answer": "初始预测值 $\\hat{y}=wx+b=1× 2+0=2$。\n误差项 $\\hat{y}-y=2-5=-3$。\n对 $w$ 的梯度：$\\frac{\\partial L}{\\partial w}=(\\hat{y}-y)x=(-3)× 2=-6$。\n对 $b$ 的梯度：$\\frac{\\partial L}{\\partial b}=\\hat{y}-y=-3$。\n参数更新：\n$w'=w-\\eta\\frac{\\partial L}{\\partial w}=1-0.1×(-6)=1.6$。\n$b'=b-\\eta\\frac{\\partial L}{\\partial b}=0-0.1×(-3)=0.3$。\n因此更新后 $w=1.6$，$b=0.3$。",
             "prompt": "线性回归梯度下降一步更新"

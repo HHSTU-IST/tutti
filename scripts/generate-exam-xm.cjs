@@ -4,7 +4,7 @@ const { spawnSync } = require("child_process");
 
 const { getQuestions, pickRandomMany, normalizeQuestion, getQuestionText } = require("../services/quiz-engine.ts");
 
-const templatePath = path.join(__dirname, "../docs/exam-template.md");
+const templatePath = path.join(__dirname, "../docs/xm-template.md");
 const examifPath = path.join(__dirname, "../docs/examif.json");
 const docxScriptPath = path.join(__dirname, "generate-exam-docx.py");
 const template = fs.readFileSync(templatePath, "utf8");
@@ -29,15 +29,15 @@ function loadTopicBank() {
 const bank = loadTopicBank();
 const DEFAULT_EXAM_LAYOUT = {
   school: "黄河科技学院",
-  singleCount: 10,
+  singleCount: 20,
   judgeCount: 10,
   fillCount: 10,
-  calcCount: 3,
+  calcCount: 2,
   essayCount: 3,
   singleScore: 1,
   judgeScore: 1,
-  fillScore: 2,
-  calcScore: 10,
+  fillScore: 1,
+  calcScore: 15,
   essayScore: 10
 };
 const COURSE_NAME_MAP = {
