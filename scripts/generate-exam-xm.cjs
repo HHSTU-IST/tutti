@@ -31,9 +31,14 @@ const DEFAULT_EXAM_LAYOUT = {
   school: "黄河科技学院",
   singleCount: 10,
   judgeCount: 10,
-  fillCount: 15,
-  calcCount: 2,
-  essayCount: 3
+  fillCount: 10,
+  calcCount: 3,
+  essayCount: 3,
+  singleScore: 1,
+  judgeScore: 1,
+  fillScore: 2,
+  calcScore: 10,
+  essayScore: 10
 };
 const COURSE_NAME_MAP = {
   xm: "机器学习概论"
@@ -192,6 +197,10 @@ function renderEssay(question, index) {
   return `${index}. ${question.question}`;
 }
 
+function sectionTotal(count, score) {
+  return count * score;
+}
+
 function makePaper(spec) {
   const singleRaw = padToCount(
     uniqueByQuestion(collectTopicQuestions("single", 1)),
@@ -216,11 +225,17 @@ function makePaper(spec) {
   const calcQuestions = pickRandomMany(bank.calcQuestions || [], DEFAULT_EXAM_LAYOUT.calcCount);
   const essayQuestions = pickRandomMany(bank.combined || [], DEFAULT_EXAM_LAYOUT.essayCount);
 
-  const singleBlock = single.map((question, index) => renderSingle(question, index + 1)).join("\n");
-  const judgeBlock = judge.map((question, index) => renderJudge(question, index + 11)).join("\n");
-  const fillBlock = fill.map((question, index) => renderFill(question, index + 21)).join("\n");
-  const calcBlock = calcQuestions.map((question, index) => renderCalc(question, index + 36)).join("\n\n");
-  const essayBlock = essayQuestions.map((question, index) => renderEssay(question, index + 38)).join("\n\n");
+  const singleStart = 1;
+  const judgeStart = singleStart + DEFAULT_EXAM_LAYOUT.singleCount;
+  const fillStart = judgeStart + DEFAULT_EXAM_LAYOUT.judgeCount;
+  const calcStart = fillStart + DEFAULT_EXAM_LAYOUT.fillCount;
+  const essayStart = calcStart + DEFAULT_EXAM_LAYOUT.calcCount;
+
+  const singleBlock = single.map((question, index) => renderSingle(question, index + singleStart)).join("\n");
+  const judgeBlock = judge.map((question, index) => renderJudge(question, index + judgeStart)).join("\n");
+  const fillBlock = fill.map((question, index) => renderFill(question, index + fillStart)).join("\n");
+  const calcBlock = calcQuestions.map((question, index) => renderCalc(question, index + calcStart)).join("\n\n");
+  const essayBlock = essayQuestions.map((question, index) => renderEssay(question, index + essayStart)).join("\n\n");
 
   const paper = fillTemplate(template, {
     school: DEFAULT_EXAM_LAYOUT.school,
@@ -244,23 +259,23 @@ function makePaper(spec) {
     ``,
     `## 一、单项选择题（每小题1分，共10分）`,
     ``,
-    single.map((q, i) => `${i + 1}. ${q.correctAnswer}`).join(" "),
+    single.map((q, i) => `${i + singleStart}. ${q.correctAnswer}`).join(" "),
     ``,
-    `## 二、判断题（每小题1分，共10分）`,
+    `## 二、判断题（每小题${DEFAULT_EXAM_LAYOUT.judgeScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.judgeCount, DEFAULT_EXAM_LAYOUT.judgeScore)}分）`,
     ``,
-    judge.map((q, i) => `${i + 11}. ${q.correctAnswer === "A" ? "T" : "F"}`).join(" "),
+    judge.map((q, i) => `${i + judgeStart}. ${q.correctAnswer === "A" ? "T" : "F"}`).join(" "),
     ``,
-    `## 三、填空题（每小题2分，共30分）`,
+    `## 三、填空题（每小题${DEFAULT_EXAM_LAYOUT.fillScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.fillCount, DEFAULT_EXAM_LAYOUT.fillScore)}分）`,
     ``,
-    fill.map((q, i) => `${i + 21}. ${q.options[0].text}`).join("\n"),
+    fill.map((q, i) => `${i + fillStart}. ${q.options[0].text}`).join("\n"),
     ``,
-    `## 四、计算题（每小题10分，共20分）`,
+    `## 四、计算题（每小题${DEFAULT_EXAM_LAYOUT.calcScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.calcCount, DEFAULT_EXAM_LAYOUT.calcScore)}分）`,
     ``,
-    calcQuestions.map((q, i) => `### ${i + 36}. ${q.prompt || "计算题"}\n\n${q.answer}`).join("\n\n"),
+    calcQuestions.map((q, i) => `### ${i + calcStart}. ${q.prompt || "计算题"}\n\n${q.answer}`).join("\n\n"),
     ``,
-    `## 五、简答题（每小题10分，共30分）`,
+    `## 五、简答题（每小题${DEFAULT_EXAM_LAYOUT.essayScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.essayCount, DEFAULT_EXAM_LAYOUT.essayScore)}分）`,
     ``,
-    essayQuestions.map((q, i) => `### ${i + 38}. ${q.prompt || "简答题"}\n\n${q.answer}`).join("\n\n")
+    essayQuestions.map((q, i) => `### ${i + essayStart}. ${q.prompt || "简答题"}\n\n${q.answer}`).join("\n\n")
   ].join("\n");
 
   return { paper, answer };

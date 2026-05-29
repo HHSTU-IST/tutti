@@ -20,7 +20,9 @@ NS = {"w": W_NS}
 
 EXPORT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "docs" / "export.json"
 DEFAULT_INPUT_MD = Path(__file__).resolve().parents[1] / "docs" / "xm-2025-2-A.md"
-LATEX_REPLACEMENTS_PATH = Path(__file__).resolve().with_name("latex-replacements.json")
+LATEX_REPLACEMENTS_PATH = (
+    Path(__file__).resolve().parents[1] / "docs" / "latex-replace.json"
+)
 EXPORT_CONFIG = {}
 LATEX_REPLACEMENTS = {}
 REQUIRED_EXPORT_SCHEMA = {
@@ -169,7 +171,9 @@ def load_export_config() -> dict:
 
 def load_latex_replacements() -> dict:
     if not LATEX_REPLACEMENTS_PATH.exists():
-        raise FileNotFoundError(f"Missing LaTeX replacements config: {LATEX_REPLACEMENTS_PATH}")
+        raise FileNotFoundError(
+            f"Missing LaTeX replacements config: {LATEX_REPLACEMENTS_PATH}"
+        )
 
     with LATEX_REPLACEMENTS_PATH.open("r", encoding="utf-8") as handle:
         config = json.load(handle)

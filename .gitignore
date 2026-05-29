@@ -6,11 +6,16 @@
 # Thumbnails
 ._*
 
+# Python
+*.pyc
+
 # Extras
 *.mp4
 *.docx
+xm-*
+
+# Node
 *.lock
-*.pyc
 
 node_modules
 dist
