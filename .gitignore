@@ -12,7 +12,8 @@
 # Extras
 *.mp4
 *.docx
-xm-*
+
+docs/xm-*
 
 # Node
 *.lock

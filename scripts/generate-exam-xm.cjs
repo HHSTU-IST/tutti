@@ -98,7 +98,7 @@ function calculateAcademicYear(yearRaw, termRaw) {
 }
 
 function calculateTermLabel(termRaw) {
-  return termRaw % 2 === 1 ? "第二" : "第一";
+  return termRaw % 2 === 0 ? "第二" : "第一";
 }
 
 function normalizeVersionRaw(versionRaw) {
@@ -257,7 +257,7 @@ function makePaper(spec) {
     ``,
     `《${spec.courseName}》试题（${spec.paperVersion}卷）参考答案`,
     ``,
-    `## 一、单项选择题（每小题1分，共10分）`,
+    `## 一、单项选择题（每小题${DEFAULT_EXAM_LAYOUT.singleScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.singleCount, DEFAULT_EXAM_LAYOUT.singleScore)}分）`,
     ``,
     single.map((q, i) => `${i + singleStart}. ${q.correctAnswer}`).join(" "),
     ``,
