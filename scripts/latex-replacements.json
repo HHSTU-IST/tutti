@@ -1,0 +1,14 @@
+{
+  "normalizeMathMarkdown": {
+    "\\hat{y}": "\\widehat{y}",
+    "y^=": "\\\\hat{y}="
+  },
+  "latexInlineReadable": {
+    "\\widehat{y}": "ŷ",
+    "\\hat{y}": "ŷ",
+    "\\mathrm{MSE}": "MSE",
+    "\\times": "×",
+    "\\approx": "≈",
+    "\\log_2": "log₂"
+  }
+}

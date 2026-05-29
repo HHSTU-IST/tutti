@@ -1,0 +1,50 @@
+{
+  "miniprogramRoot": "./",
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "uglifyFileName": false,
+    "enhance": true,
+    "packNpmRelationList": [],
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "useCompilerPlugins": [
+      "typescript"
+    ],
+    "minifyWXML": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.16.0",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "x-ai"
+      },
+      {
+        "type": "folder",
+        "value": "x-ml"
+      },
+      {
+        "type": "folder",
+        "value": "x-img"
+      },
+      {
+        "type": "folder",
+        "value": "docs"
+      },
+      {
+        "type": "suffix",
+        "value": ".ipynb"
+      }
+    ],
+    "include": []
+  },
+  "appid": "wxf7f1812c7c4f4106",
+  "editorSetting": {}
+}

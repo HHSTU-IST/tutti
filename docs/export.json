@@ -1,0 +1,147 @@
+{
+  "document": {
+    "pageSize": {
+      "width": 10318,
+      "height": 14570
+    },
+    "margins": {
+      "top": 1440,
+      "right": 1109,
+      "bottom": 1440,
+      "left": 1800,
+      "header": 720,
+      "footer": 720,
+      "gutter": 0
+    }
+  },
+  "styles": {
+    "firstTitle": {
+      "font": {
+        "eastAsia": "黑体",
+        "latin": "Times New Roman",
+        "sizeHalfPoints": 32,
+        "bold": false
+      },
+      "spacing": {
+        "before": 0,
+        "after": 60,
+        "line": 240
+      },
+      "alignment": "center"
+    },
+    "secondTitle": {
+      "font": {
+        "eastAsia": "黑体",
+        "latin": "Times New Roman",
+        "sizeHalfPoints": 36,
+        "bold": false
+      },
+      "spacing": {
+        "before": 0,
+        "after": 60,
+        "line": 240
+      },
+      "alignment": "center"
+    },
+    "paperCode": {
+      "font": {
+        "eastAsia": "宋体",
+        "latin": "Times New Roman",
+        "sizeHalfPoints": 28,
+        "bold": false
+      },
+      "spacing": {
+        "before": 0,
+        "after": 0,
+        "line": 240
+      },
+      "alignment": "center",
+      "indent": {
+        "left": 0,
+        "firstLine": 0,
+        "hanging": 0
+      }
+    },
+    "targetMajor": {
+      "font": {
+        "eastAsia": "黑体",
+        "latin": "Times New Roman",
+        "sizeHalfPoints": 28,
+        "bold": false
+      },
+      "spacing": {
+        "before": 0,
+        "after": 0,
+        "line": 240
+      },
+      "alignment": "center",
+      "indent": {
+        "left": 0,
+        "firstLine": 0,
+        "hanging": 0
+      }
+    },
+    "sectionTitle": {
+      "font": {
+        "eastAsia": "黑体",
+        "latin": "Times New Roman",
+        "sizeHalfPoints": 24,
+        "bold": false
+      },
+      "spacing": {
+        "before": 240,
+        "after": 0,
+        "line": 240
+      },
+      "alignment": "left",
+      "indent": {
+        "left": 0,
+        "firstLine": 0,
+        "hanging": 0
+      }
+    },
+    "sectionNote": {
+      "font": {
+        "eastAsia": "宋体",
+        "latin": "Times New Roman",
+        "sizeHalfPoints": 24,
+        "bold": false
+      }
+    },
+    "body": {
+      "font": {
+        "eastAsia": "宋体",
+        "latin": "Times New Roman",
+        "sizeHalfPoints": 24,
+        "bold": false
+      },
+      "spacing": {
+        "before": 0,
+        "after": 0,
+        "line": 240
+      },
+      "alignment": "left",
+      "indent": {
+        "left": 0,
+        "firstLine": 0,
+        "hanging": 0
+      }
+    },
+    "table": {
+      "alignment": "center",
+      "borderStyle": "single"
+    }
+  },
+  "rules": {
+    "titleLevel": 1,
+    "sectionLevel": 2,
+    "questionNumbering": "global",
+    "sectionBeforeBlankLine": true,
+    "questionGap": false,
+    "questionIndent": false,
+    "tableCentered": true
+  },
+  "trim": {
+    "marker": "## 制卷提示"
+  }
+}

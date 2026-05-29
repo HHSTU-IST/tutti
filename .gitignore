@@ -1,0 +1,17 @@
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Extras
+*.mp4
+*.docx
+*.lock
+*.pyc
+
+node_modules
+dist
+miniprogram_npm

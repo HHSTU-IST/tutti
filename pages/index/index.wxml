@@ -1,0 +1,79 @@
+<view class="page index-page {{platformClass}}">
+  <view class="hero">
+    <view class="brand-row">
+      <view class="brand-mark">✓</view>
+      <view>
+        <view class="brand-name">刷题助手</view>
+        <view class="brand-subtitle">微信登录后自动加载已购买题库</view>
+      </view>
+    </view>
+
+    <view class="hero-title">专注练习、错题回看、进度追踪</view>
+    <view class="hero-copy">题库权限由后台根据购买情况分配，当前页面不提供手动切换入口。</view>
+
+    <button
+      class="login-btn"
+      loading="{{isLoading}}"
+      disabled="{{isLoading}}"
+      bindtap="handleWechatLogin"
+    >
+      微信登录
+    </button>
+  </view>
+
+  <view class="status card">
+    <view class="status-head">
+      <view style="flex: 1 1 0; min-width: 0;">
+        <view class="status-title">登录状态</view>
+      </view>
+      <view class="status-pill {{loginState}}">{{statusText}}</view>
+    </view>
+
+    <view class="info-grid">
+      <view class="info-item">
+        <view class="info-label">运行平台</view>
+        <view class="info-value">{{platformText}}</view>
+      </view>
+      <view class="info-item">
+        <view class="info-label">微信ID</view>
+        <view class="info-value">{{wechatIdDisplay}}</view>
+      </view>
+      <view class="info-item">
+        <view class="info-label">已开通题库</view>
+        <view class="info-value">{{unlockedCount}}</view>
+      </view>
+    </view>
+
+    <button
+      wx:if="{{canEnter}}"
+      class="enter-btn"
+      bindtap="enterQuiz"
+    >
+      进入刷题
+    </button>
+  </view>
+
+  <view class="feature-grid">
+    <view class="feature card">
+      <view class="feature-icon">题</view>
+      <view>
+        <view class="feature-title">随机出题</view>
+        <view class="feature-copy">按专题或随机抽取题目，选项自动打乱。</view>
+      </view>
+    </view>
+    <view class="feature card">
+      <view class="feature-icon">错</view>
+      <view>
+        <view class="feature-title">错题记录</view>
+        <view class="feature-copy">错题写入用户档案，便于复盘。</view>
+      </view>
+    </view>
+    <view class="feature card">
+      <view class="feature-icon">进</view>
+      <view>
+        <view class="feature-title">进度同步</view>
+        <view class="feature-copy">答题统计和专题进度随用户保存。</view>
+      </view>
+    </view>
+  </view>
+</view>

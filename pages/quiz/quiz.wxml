@@ -1,0 +1,91 @@
+<view class="page quiz-page {{platformClass}}">
+  <block wx:if="{{isReady}}">
+    <view class="summary card">
+      <view style="flex: 1 1 0; min-width: 0;">
+        <view class="course-title">{{title}}</view>
+        <view class="muted">当前专题：{{currentTopicName}}</view>
+      </view>
+      <button class="danger-btn reset-btn" bindtap="resetStats">重置</button>
+    </view>
+
+    <view class="stats-grid">
+      <view class="stat card">
+        <view class="stat-value ok">{{rightNum}}</view>
+        <view class="stat-label">正确</view>
+      </view>
+      <view class="stat card">
+        <view class="stat-value bad">{{wrongNum}}</view>
+        <view class="stat-label">错误</view>
+      </view>
+      <view class="stat card">
+        <view class="stat-value">{{totalNum}}</view>
+        <view class="stat-label">总题数</view>
+      </view>
+      <view class="stat card">
+        <view class="stat-value">{{rateText}}</view>
+        <view class="stat-label">正确率</view>
+      </view>
+    </view>
+
+    <view class="topic-grid">
+      <button wx:for="{{topics}}" wx:key="key" class="{{item.buttonClass}}" data-topic="{{item.key}}" bindtap="switchTopic">
+        {{item.name}}
+      </button>
+    </view>
+
+    <view class="progress card">
+      <view class="progress-head">
+        <view>{{currentTopicName}} 进度</view>
+        <view class="muted">{{progressText}}</view>
+      </view>
+      <view class="progress-track">
+        <view class="progress-bar" style="width: {{progressPercent}}%;"></view>
+      </view>
+    </view>
+
+    <view class="actions card">
+      <view class="mode-grid">
+        <button class="plain-btn mode-btn {{selectedAction === 'topic-single' ? 'action-selected' : ''}}" bindtap="makeTopicSingle">专题单选</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'topic-judge' ? 'action-selected' : ''}}" bindtap="makeTopicJudge">专题判断</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'random-single' ? 'action-selected' : ''}}" bindtap="makeRandomSingle">随机单选</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'random-judge' ? 'action-selected' : ''}}" bindtap="makeRandomJudge">随机判断</button>
+      </view>
+      <button class="ghost-btn error-btn {{selectedAction === 'errors' ? 'action-selected' : ''}}" bindtap="showErrors">错题本</button>
+    </view>
+
+    <view wx:if="{{showErrorBook}}" class="error-book card">
+      <view class="panel-title">错题本</view>
+      <view wx:if="{{hasNoErrors}}" class="empty muted">当前还没有错题。</view>
+      <view wx:for="{{errorList}}" wx:key="id" class="error-item">
+        <rich-text nodes="{{item.question}}"></rich-text>
+        <view class="answer-line">正确答案：{{item.answer}}</view>
+      </view>
+    </view>
+
+    <view wx:elif="{{currentQuestion}}" class="question card">
+      <view class="question-meta">{{currentQuestion.topicName}} · {{currentQuestion.typeName}} · {{currentQuestion.difficulty || '中'}}</view>
+      <rich-text class="question-text" nodes="{{currentQuestion.question}}"></rich-text>
+      <view class="option-list">
+        <button wx:for="{{currentQuestion.options}}" wx:key="value" class="{{item.buttonClass}}" data-value="{{item.value}}" bindtap="answerQuestion" disabled="{{answered}}">
+          <view class="option-mark">{{item.value}}</view>
+          <text class="option-text">{{item.text}}</text>
+        </button>
+      </view>
+      <view wx:if="{{answered}}" class="{{analysisClass}}">
+        <view class="analysis-title">{{analysisTitle}}</view>
+        <rich-text nodes="{{explanation}}"></rich-text>
+      </view>
+    </view>
+
+    <view wx:else class="empty-state card">
+      <view class="panel-title">开始练习</view>
+      <view class="muted">先选择专题，再点击出题。</view>
+    </view>
+  </block>
+
+  <view wx:else class="empty-state card not-ready">
+    <view class="panel-title">暂未加载题库</view>
+    <view class="muted">{{readyMessage}}</view>
+    <button class="primary-btn home-btn" bindtap="goHome">返回登录</button>
+  </view>
+</view>

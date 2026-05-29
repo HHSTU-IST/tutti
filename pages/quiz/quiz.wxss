@@ -1,0 +1,310 @@
+.quiz-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding-bottom: 44rpx;
+  overflow-x: hidden;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 28rpx;
+  flex-wrap: wrap;
+}
+
+.course-title {
+  margin-bottom: 8rpx;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.reset-btn {
+  min-width: 128rpx;
+  padding: 12rpx 18rpx;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.stat {
+  padding: 18rpx 8rpx;
+  text-align: center;
+}
+
+.stat-value {
+  color: #172033;
+  font-size: 32rpx;
+  font-weight: 800;
+}
+
+.stat-value.ok {
+  color: #07803f;
+}
+
+.stat-value.bad {
+  color: #b42318;
+}
+
+.stat-label {
+  margin-top: 4rpx;
+  color: #667085;
+  font-size: 22rpx;
+}
+
+.topic-btn,
+.mode-btn,
+.error-btn {
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1rpx solid #d7e0ea;
+  color: #334155;
+  padding: 8rpx;
+  white-space: normal;
+}
+
+.topic-btn.active {
+  background: #173d7a;
+  color: #ffffff;
+  border-color: #173d7a;
+}
+
+.topic-span-full {
+  grid-column: 1 / -1;
+}
+
+.topic-grid,
+.mode-grid,
+.option-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx 16rpx;
+}
+
+.option-list {
+  margin-top: 26rpx;
+}
+
+.error-btn {
+  padding-left: 20rpx;
+  padding-right: 20rpx;
+}
+
+.progress {
+  padding: 24rpx;
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  font-size: 26rpx;
+  font-weight: 700;
+  gap: 12rpx;
+}
+
+.progress-track {
+  height: 16rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #e7edf5;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 999rpx;
+  background: #12b76a;
+  transition: width 0.2s ease;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  padding: 20rpx;
+  align-items: stretch;
+}
+
+.action-selected {
+  background: #173d7a;
+  color: #ffffff;
+  border-color: #173d7a;
+}
+
+.question,
+.error-book,
+.empty-state {
+  padding: 24rpx;
+}
+
+.question-meta,
+.panel-title {
+  word-break: break-word;
+}
+
+.question-meta {
+  margin-bottom: 16rpx;
+  color: #1f6feb;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.question-text {
+  color: #101828;
+  font-size: 30rpx;
+  line-height: 1.7;
+}
+
+.option-btn {
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1rpx solid #d7e0ea;
+  border-radius: 8px;
+  color: #172033;
+  gap: 18rpx;
+  min-width: 0;
+  overflow: hidden;
+  padding: 12rpx 14rpx;
+  text-align: left;
+}
+
+.option-btn.selected {
+  border-color: #173d7a;
+  background: #173d7a;
+  color: #ffffff;
+}
+
+.option-btn.correct {
+  border-color: #12b76a;
+  background: #ecfdf3;
+}
+
+.option-btn.wrong {
+  border-color: #f04438;
+  background: #fff1f0;
+}
+
+.option-mark {
+  display: flex;
+  height: 46rpx;
+  width: 46rpx;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 50%;
+  color: #1f4f8f;
+  flex-shrink: 0;
+  font-weight: 800;
+  justify-content: center;
+}
+
+.option-text {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  font-size: 28rpx;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.analysis {
+  margin-top: 26rpx;
+  padding: 22rpx;
+  border-radius: 8px;
+  font-size: 27rpx;
+  line-height: 1.6;
+}
+
+.analysis.right {
+  background: #ecfdf3;
+  color: #05603a;
+}
+
+.analysis.wrong {
+  background: #fff1f0;
+  color: #912018;
+}
+
+.analysis-title {
+  margin-bottom: 10rpx;
+  font-weight: 800;
+}
+
+.panel-title {
+  margin-bottom: 16rpx;
+  color: #101828;
+  font-size: 32rpx;
+  font-weight: 800;
+}
+
+.empty {
+  padding: 20rpx 0;
+  text-align: center;
+}
+
+.error-item {
+  padding: 18rpx 0;
+  border-top: 1rpx solid #e7edf5;
+  font-size: 27rpx;
+  line-height: 1.6;
+}
+
+.answer-line {
+  margin-top: 10rpx;
+  color: #b42318;
+  font-weight: 700;
+}
+
+@media screen and (max-width: 360px) {
+
+  .topic-grid,
+  .mode-grid,
+  .option-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.not-ready {
+  margin-top: 32rpx;
+}
+
+.home-btn {
+  margin-top: 28rpx;
+  width: 100%;
+}
+
+@media screen and (max-width: 420px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary {
+    padding: 24rpx 18rpx;
+  }
+
+  .question,
+  .error-book,
+  .empty-state,
+  .actions,
+  .progress {
+    padding-left: 18rpx;
+    padding-right: 18rpx;
+  }
+
+  .course-title {
+    font-size: 30rpx;
+  }
+
+  .question-text {
+    font-size: 28rpx;
+  }
+
+  .option-btn {
+    gap: 18rpx;
+    padding: 10rpx 12rpx;
+  }
+}
