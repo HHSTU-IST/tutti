@@ -7,7 +7,7 @@ import type {
   QuizBank,
   QuizQuestion,
   RawQuestion
-} from "../types/quiz-bank.ts";
+} from "../types/quiz-bank";
 
 const LETTERS: AnswerValue[] = ["A", "B", "C", "D", "E", "F"];
 

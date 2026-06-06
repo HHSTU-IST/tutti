@@ -8,9 +8,10 @@ import re
 import shutil
 import subprocess
 import tempfile
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+
+import defusedxml.ElementTree as ET
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -98,7 +99,7 @@ REQUIRED_EXPORT_SCHEMA = {
                 "latin": None,
                 "sizeHalfPoints": None,
                 "bold": None,
-            },
+            }
         },
         "body": {
             "font": {
@@ -111,10 +112,7 @@ REQUIRED_EXPORT_SCHEMA = {
             "alignment": None,
             "indent": {"left": None, "firstLine": None, "hanging": None},
         },
-        "table": {
-            "alignment": None,
-            "borderStyle": None,
-        },
+        "table": {"alignment": None, "borderStyle": None},
     },
     "rules": {
         "titleLevel": None,
@@ -125,9 +123,7 @@ REQUIRED_EXPORT_SCHEMA = {
         "questionIndent": None,
         "tableCentered": None,
     },
-    "trim": {
-        "marker": None,
-    },
+    "trim": {"marker": None},
 }
 
 ET.register_namespace("w", W_NS)
@@ -300,11 +296,7 @@ def set_alignment(ppr: ET.Element, value: str) -> None:
 
 
 def set_indent(
-    ppr: ET.Element,
-    *,
-    left: int = 0,
-    first_line: int = 0,
-    hanging: int = 0,
+    ppr: ET.Element, *, left: int = 0, first_line: int = 0, hanging: int = 0
 ) -> None:
     ind = ppr.find("w:ind", NS)
     if ind is None:
@@ -498,11 +490,7 @@ def is_section_heading(style_id: str, text: str, section_level: int) -> bool:
     )
 
 
-def resolve_paragraph_role(
-    style_id: str,
-    text: str,
-    heading1_index: int,
-) -> str:
+def resolve_paragraph_role(style_id: str, text: str, heading1_index: int) -> str:
     rules_cfg = EXPORT_CONFIG["rules"]
     title_style_id = heading_style_id(int(rules_cfg["titleLevel"]))
     section_level = int(rules_cfg["sectionLevel"])
@@ -800,10 +788,7 @@ def remove_empty_paragraphs(body: ET.Element) -> None:
             body.remove(paragraph)
 
 
-def apply_run_format(
-    run: ET.Element,
-    font_cfg: dict,
-) -> None:
+def apply_run_format(run: ET.Element, font_cfg: dict) -> None:
     apply_text_format(run, font_cfg)
 
 
@@ -967,14 +952,12 @@ def latex_inline_to_readable_text(expr: str) -> str:
         expr = frac_pattern.sub(r"(\1)/(\2)", expr)
 
     sub_pattern = re.compile(r"([A-Za-z])_\{?([A-Za-z0-9]+)\}?")
-    expr = sub_pattern.sub(r"\1_\2", expr)
-    return expr
+    return sub_pattern.sub(r"\1_\2", expr)
 
 
 def replace_inline_math_with_readable_text(text: str) -> str:
     return INLINE_MATH_PATTERN.sub(
-        lambda match: latex_inline_to_readable_text(match.group(1)),
-        text,
+        lambda match: latex_inline_to_readable_text(match.group(1)), text
     )
 
 

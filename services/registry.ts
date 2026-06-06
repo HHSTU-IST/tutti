@@ -1,5 +1,5 @@
-import { AgentKind } from "./purchase.ts";
-import { CourseInfo, QuizBank, TopicBank, TopicItem } from "../types/quiz-bank.ts";
+import { AgentKind } from "./purchase";
+import { CourseInfo, QuizBank, TopicBank, TopicItem } from "../types/quiz-bank";
 
 const pyBank = require("../data/topic-py") as QuizBank;
 const mlBank = require("../data/topic-ml") as QuizBank;
