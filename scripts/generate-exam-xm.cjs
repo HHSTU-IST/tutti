@@ -1,8 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { loadQuizEngine } = require("./load-quiz-engine.cjs");
+const { loadTopicBank } = require("./load-topic-bank.cjs");
 
-const { getQuestions, pickRandomMany, normalizeQuestion, getQuestionText } = require("../services/quiz-engine.ts");
+const { getQuestions, pickRandomMany, normalizeQuestion, getQuestionText } = loadQuizEngine();
 
 const templatePath = path.join(__dirname, "../docs/xm-template.md");
 const examifPath = path.join(__dirname, "../docs/examif.json");
@@ -10,23 +12,7 @@ const docxScriptPath = path.join(__dirname, "generate-exam-docx.py");
 const template = fs.readFileSync(templatePath, "utf8");
 const examif = JSON.parse(fs.readFileSync(examifPath, "utf8"));
 
-function loadTopicBank() {
-  const bankPath = path.join(__dirname, "../data/topic-ml.ts");
-  const source = fs
-    .readFileSync(bankPath, "utf8")
-    .replace(
-      /^const data: import\("\.\.\/types\/quiz-bank"\)\.QuizBank = /,
-      "const data = "
-    )
-    .replace(/\nexport = data;\s*$/, "\nmodule.exports = data;\n");
-
-  const module = { exports: {} };
-  const factory = new Function("module", "exports", source);
-  factory(module, module.exports);
-  return module.exports;
-}
-
-const bank = loadTopicBank();
+const bank = loadTopicBank("ml");
 const DEFAULT_EXAM_LAYOUT = {
   school: "黄河科技学院",
   singleCount: 20,
@@ -285,22 +271,55 @@ function makePaper(spec) {
   return { paper, answer };
 }
 
-const fileName = process.argv[2] || "xm-2026-1-A.md";
-const spec = loadExamSpec(fileName);
-const versions = ["A", "B"];
+function getTitlePreview(text) {
+  return text
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(" ");
+}
 
-versions.forEach(version => {
-  const currentSpec = Object.assign({}, spec, {
-    paperVersion: version,
-    versionRaw: version
+function runCli(fileName = process.argv[2] || "xm-2026-1-A.md") {
+  const spec = loadExamSpec(fileName);
+  const versions = ["A", "B"];
+  const manifest = [];
+
+  versions.forEach(version => {
+    const currentSpec = Object.assign({}, spec, {
+      paperVersion: version,
+      versionRaw: version
+    });
+    const { paper, answer } = makePaper(currentSpec);
+    const baseName = makePaperFileName(currentSpec, version);
+    const outPaper = path.join(__dirname, `../docs/${baseName}.md`);
+    const outAnswer = path.join(__dirname, `../docs/${baseName}k.md`);
+    fs.writeFileSync(outPaper, paper);
+    fs.writeFileSync(outAnswer, answer);
+    console.log(outPaper);
+    console.log(outAnswer);
+    generateDocx(outPaper);
+    manifest.push({
+      version,
+      outPaper,
+      outAnswer,
+      paperTitle: getTitlePreview(paper),
+      answerTitle: getTitlePreview(answer),
+      paperLength: paper.length,
+      answerLength: answer.length
+    });
   });
-  const { paper, answer } = makePaper(currentSpec);
-  const baseName = makePaperFileName(currentSpec, version);
-  const outPaper = path.join(__dirname, `../docs/${baseName}.md`);
-  const outAnswer = path.join(__dirname, `../docs/${baseName}k.md`);
-  fs.writeFileSync(outPaper, paper);
-  fs.writeFileSync(outAnswer, answer);
-  console.log(outPaper);
-  console.log(outAnswer);
-  generateDocx(outPaper);
-});
+
+  return manifest;
+}
+
+module.exports = {
+  loadExamSpec,
+  makePaper,
+  makePaperFileName,
+  runCli
+};
+
+if (require.main === module) {
+  runCli();
+}
