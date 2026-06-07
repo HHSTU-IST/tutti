@@ -268,7 +268,17 @@ function makePaper(spec) {
     essayQuestions.map((q, i) => `### ${i + essayStart}. ${q.prompt || "简答题"}\n\n${q.answer}`).join("\n\n")
   ].join("\n");
 
-  return { paper, answer };
+  return {
+    paper,
+    answer,
+    counts: {
+      single: single.length,
+      judge: judge.length,
+      fill: fill.length,
+      calc: calcQuestions.length,
+      essay: essayQuestions.length
+    }
+  };
 }
 
 function getTitlePreview(text) {
@@ -280,43 +290,87 @@ function getTitlePreview(text) {
     .join(" ");
 }
 
-function runCli(fileName = process.argv[2] || "xm-2026-1-A.md") {
-  const spec = loadExamSpec(fileName);
-  const versions = ["A", "B"];
-  const manifest = [];
+function buildManifestEntry({ spec, version, outPaper, outAnswer, paper, answer, counts }) {
+  return {
+    version,
+    courseCode: spec.courseCode,
+    courseName: spec.courseName,
+    paperCode: spec.paperCode,
+    academicYear: spec.academicYear,
+    term: spec.term,
+    targetMajor: spec.targetMajor,
+    outPaper,
+    outAnswer,
+    paperTitle: getTitlePreview(paper),
+    answerTitle: getTitlePreview(answer),
+    paperLength: paper.length,
+    answerLength: answer.length,
+    paperBytes: Buffer.byteLength(paper, "utf8"),
+    answerBytes: Buffer.byteLength(answer, "utf8"),
+    counts
+  };
+}
 
-  versions.forEach(version => {
-    const currentSpec = Object.assign({}, spec, {
-      paperVersion: version,
-      versionRaw: version
-    });
-    const { paper, answer } = makePaper(currentSpec);
-    const baseName = makePaperFileName(currentSpec, version);
-    const outPaper = path.join(__dirname, `../docs/${baseName}.md`);
-    const outAnswer = path.join(__dirname, `../docs/${baseName}k.md`);
-    fs.writeFileSync(outPaper, paper);
-    fs.writeFileSync(outAnswer, answer);
-    console.log(outPaper);
-    console.log(outAnswer);
-    generateDocx(outPaper);
-    manifest.push({
+function publishGeneratedArtifacts({ manifestEntry, paper, answer }) {
+  fs.writeFileSync(manifestEntry.outPaper, paper);
+  fs.writeFileSync(manifestEntry.outAnswer, answer);
+  console.log(manifestEntry.outPaper);
+  console.log(manifestEntry.outAnswer);
+  generateDocx(manifestEntry.outPaper);
+  return manifestEntry;
+}
+
+function buildVersionArtifacts({ spec, version }) {
+  const currentSpec = Object.assign({}, spec, {
+    paperVersion: version,
+    versionRaw: version
+  });
+  const { paper, answer, counts } = makePaper(currentSpec);
+  const baseName = makePaperFileName(currentSpec, version);
+  const outPaper = path.join(__dirname, `../docs/${baseName}.md`);
+  const outAnswer = path.join(__dirname, `../docs/${baseName}k.md`);
+
+  return {
+    manifestEntry: buildManifestEntry({
+      spec: currentSpec,
       version,
       outPaper,
       outAnswer,
-      paperTitle: getTitlePreview(paper),
-      answerTitle: getTitlePreview(answer),
-      paperLength: paper.length,
-      answerLength: answer.length
+      paper,
+      answer,
+      counts
+    }),
+    paper,
+    answer
+  };
+}
+
+function runCli(fileName = process.argv[2] || "xm-2026-1-A.md", versions = ["A", "B"]) {
+  const spec = loadExamSpec(fileName);
+  const manifest = [];
+
+  versions.forEach(version => {
+    const { manifestEntry, paper, answer } = buildVersionArtifacts({
+      spec,
+      version
     });
+    manifest.push(publishGeneratedArtifacts({
+      manifestEntry,
+      paper,
+      answer
+    }));
   });
 
   return manifest;
 }
 
 module.exports = {
+  buildManifestEntry,
+  buildVersionArtifacts,
   loadExamSpec,
   makePaper,
   makePaperFileName,
+  publishGeneratedArtifacts,
   runCli
 };
 
