@@ -8,10 +8,11 @@ import re
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-import defusedxml.ElementTree as ET
+import defusedxml.ElementTree as DefusedET
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -128,6 +129,7 @@ REQUIRED_EXPORT_SCHEMA = {
 
 ET.register_namespace("w", W_NS)
 ET.register_namespace("r", R_NS)
+ET.parse = DefusedET.parse
 
 OPTION_MARKER_PATTERN = re.compile(r"\(([A-D])\)\s*")
 QUESTION_SECTION_PATTERN = re.compile(r"^[一二三四五六七八九十]+、")
