@@ -33,7 +33,8 @@ import {
   getAllQuestions,
   getQuestions,
   normalizeQuestion,
-  pickRandom
+  pickRandom,
+  pickRandomMany
 } from "../../services/quiz-engine";
 
 interface ErrorItem {
@@ -72,6 +73,8 @@ interface QuizData {
   errorList: ErrorItem[];
   hasNoErrors: boolean;
   showErrorBook: boolean;
+  examMode: boolean;
+  examProgressText: string;
 }
 
 interface QuizPageInstance {
@@ -90,9 +93,14 @@ interface QuizPageInstance {
   makeTopicJudge(): void;
   makeRandomSingle(): void;
   makeRandomJudge(): void;
+  startExam(): void;
+  nextExamQuestion(): void;
+  exportPaper(): void;
+  exportErrors(): void;
   getQuestions(topicKey: string, type: QuestionType): RawQuestion[];
   getAllQuestions(type: QuestionType): RawQuestion[];
   makeQuestion(type: QuestionType, questions: RawQuestion[]): void;
+  showQuestion(currentQuestion: QuizQuestion, source?: RawQuestion): void;
   normalizeQuestion(question: RawQuestion, type: QuestionType, topicName: string): QuizQuestion;
   answerQuestion(event: MiniProgramTapEvent<{ value?: AnswerValue }>): void;
   persistQuizSnapshot(errorList: ErrorItem[], stats: AnswerStats): void;
@@ -137,6 +145,8 @@ Page<QuizData, QuizPageInstance>({
   topicDone: {},
   userProfile: null,
   wechatOpenId: "",
+  examQuestions: [],
+  examIndex: 0,
 
   onLoad() {
     this.refreshDeviceInfo();
@@ -240,7 +250,9 @@ Page<QuizData, QuizPageInstance>({
     this.setData({
       currentTopic,
       currentQuestion: null,
-      showErrorBook: false
+    showErrorBook: false,
+    examMode: false,
+    examProgressText: ""
     });
     this.updateComputedViewState();
   },
@@ -267,7 +279,9 @@ Page<QuizData, QuizPageInstance>({
       answered: false,
       isCorrect: false,
       hasNoErrors: true,
-      showErrorBook: false
+      showErrorBook: false,
+      examMode: false,
+      examProgressText: ""
     });
     this.updateComputedViewState();
     void resetQuizSnapshot(this.wechatOpenId, this.data.kind).catch(() => {
@@ -319,6 +333,86 @@ Page<QuizData, QuizPageInstance>({
     this.makeQuestion("judge", this.getAllQuestions("judge"));
   },
 
+  startExam() {
+    const questions: QuizQuestion[] = [];
+    ([
+      ["single", 20],
+      ["judge", 10],
+      ["fill", 10]
+    ] as Array<[QuestionType, number]>).forEach(([type, count]) => {
+      pickRandomMany(this.getAllQuestions(type), count).forEach(question => {
+        questions.push(this.normalizeQuestion(question, type, question.topic || ""));
+      });
+    });
+
+    if (!questions.length) {
+      wx.showToast({ title: "暂无足够题目", icon: "none" });
+      return;
+    }
+
+    this.examQuestions = questions;
+    this.examIndex = 0;
+    this.setData({
+      selectedAction: "exam",
+      showErrorBook: false,
+      examMode: true,
+      examProgressText: `1/${questions.length}`
+    });
+    this.showQuestion(questions[0]);
+  },
+
+  nextExamQuestion() {
+    if (!this.data.examMode || !this.data.answered) return;
+    const nextIndex = this.examIndex + 1;
+    if (nextIndex >= this.examQuestions.length) {
+      wx.showToast({ title: "试卷已完成", icon: "success" });
+      this.setData({ examMode: false, examProgressText: "已完成" });
+      return;
+    }
+
+    this.examIndex = nextIndex;
+    this.setData({ examProgressText: `${nextIndex + 1}/${this.examQuestions.length}` });
+    this.showQuestion(this.examQuestions[nextIndex]);
+  },
+
+  exportPaper() {
+    if (!this.examQuestions.length) {
+      wx.showToast({ title: "请先开始试卷练习", icon: "none" });
+      return;
+    }
+
+    const text = [
+      `《${this.data.title}》试卷`,
+      `共 ${this.examQuestions.length} 题`,
+      "",
+      ...this.examQuestions.map((question, index) => {
+        const options = question.options.map(option => `(${option.value})${option.text}`).join(" ");
+        return `${index + 1}. ${question.question}${options ? `\n${options}` : ""}`;
+      })
+    ].join("\n");
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: "试卷已复制", icon: "success" })
+    });
+  },
+
+  exportErrors() {
+    if (!this.data.errorList.length) {
+      wx.showToast({ title: "当前还没有错题", icon: "none" });
+      return;
+    }
+
+    const text = [
+      `《${this.data.title}》错题本`,
+      "",
+      ...this.data.errorList.map((item, index) => `${index + 1}. ${item.question}\n正确答案：${item.answer}`)
+    ].join("\n\n");
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: "错题本已复制", icon: "success" })
+    });
+  },
+
   getQuestions(topicKey: string, type: QuestionType): RawQuestion[] {
     return getQuestions(this.bank, topicKey, type);
   },
@@ -337,13 +431,16 @@ Page<QuizData, QuizPageInstance>({
     }
 
     const source = pickRandom(questions);
-    const currentQuestion = this.normalizeQuestion(source, type, source.topic || "");
+    this.showQuestion(this.normalizeQuestion(source, type, source.topic || ""), source);
+  },
+
+  showQuestion(currentQuestion: QuizQuestion, source?: RawQuestion) {
 
     this.setData({
       currentQuestion,
       selectedAnswer: "",
       correctAnswer: currentQuestion.correctAnswer,
-      explanation: formatExplain(source),
+      explanation: formatExplain(source || currentQuestion.raw),
       analysisClass: "analysis",
       analysisTitle: "",
       answered: false,

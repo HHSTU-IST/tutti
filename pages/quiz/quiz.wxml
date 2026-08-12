@@ -45,12 +45,18 @@
 
     <view class="actions card">
       <view class="mode-grid">
+        <button class="plain-btn mode-btn {{selectedAction === 'exam' ? 'action-selected' : ''}}" bindtap="startExam">试卷练习</button>
         <button class="plain-btn mode-btn {{selectedAction === 'topic-single' ? 'action-selected' : ''}}" bindtap="makeTopicSingle">专题单选</button>
         <button class="plain-btn mode-btn {{selectedAction === 'topic-judge' ? 'action-selected' : ''}}" bindtap="makeTopicJudge">专题判断</button>
         <button class="plain-btn mode-btn {{selectedAction === 'random-single' ? 'action-selected' : ''}}" bindtap="makeRandomSingle">随机单选</button>
         <button class="plain-btn mode-btn {{selectedAction === 'random-judge' ? 'action-selected' : ''}}" bindtap="makeRandomJudge">随机判断</button>
       </view>
-      <button class="ghost-btn error-btn {{selectedAction === 'errors' ? 'action-selected' : ''}}" bindtap="showErrors">错题本</button>
+      <view class="export-row">
+        <button class="ghost-btn error-btn {{selectedAction === 'errors' ? 'action-selected' : ''}}" bindtap="showErrors">错题本</button>
+        <button class="ghost-btn error-btn" bindtap="exportErrors">导出错题本</button>
+        <button class="ghost-btn error-btn" bindtap="exportPaper">导出试卷</button>
+      </view>
+      <view wx:if="{{examMode}}" class="exam-progress">试卷进度：{{examProgressText}}</view>
     </view>
 
     <view wx:if="{{showErrorBook}}" class="error-book card">
@@ -75,6 +81,7 @@
         <view class="analysis-title">{{analysisTitle}}</view>
         <rich-text nodes="{{explanation}}"></rich-text>
       </view>
+      <button wx:if="{{examMode && answered}}" class="primary-btn next-btn" bindtap="nextExamQuestion">下一题</button>
     </view>
 
     <view wx:else class="empty-state card">

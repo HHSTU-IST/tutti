@@ -95,6 +95,19 @@
   padding-right: 20rpx;
 }
 
+.export-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.exam-progress {
+  color: #1f6feb;
+  font-size: 24rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
 .progress {
   padding: 24rpx;
 }
@@ -232,6 +245,11 @@
 .analysis-title {
   margin-bottom: 10rpx;
   font-weight: 800;
+}
+
+.next-btn {
+  margin-top: 24rpx;
+  width: 100%;
 }
 
 .panel-title {
