@@ -28,10 +28,6 @@ export function getDefaultAgentAccess(): AgentAccessMap {
   }, {});
 }
 
-export function resolvePurchasedAgent(availableAgents?: AgentKind[]): Promise<AgentKind | null> {
-  return resolveUserSession(availableAgents).then(session => session && session.agent);
-}
-
 export function resolveUserSession(availableAgents?: AgentKind[]): Promise<UserSession | null> {
   if (!RUNTIME_CONFIG.wechatLoginApiUrl && RUNTIME_CONFIG.enableLocalWechatTestLogin) {
     return loginWithWechat()

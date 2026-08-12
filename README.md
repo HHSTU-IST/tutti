@@ -12,7 +12,7 @@ hh-tutor 为原生微信小程序，不使用 Vite、Vue 或前端进行依赖�
 - **登录**: 仅支持微信登录，使用 `wx.login` 获取 code 后交给后台校验
 - **授权**: 后台根据用户购买情况返回可加载的刷题助手
 - **用户数据库**: 微信云数据库集合 `user_profiles`
-- **运行开关**: `services/runtime-config.ts`，会根据小程序环境自动选择开发 / 生产 profile
+- **运行开关**: `services/runtime-config.ts`，会根据小程序环境自动选择开发 / 生产配置
 
 ## 主要功能
 
@@ -134,7 +134,7 @@ hh-tutor/
 
 ## 扫码测试登录
 
-当前 `services/purchase.ts` 支持本地扫码测试模式：当 `services/runtime-config.ts` 选中 development profile 时，小程序仍会调用 `wx.login()`，开发者工具扫码登录后会生成本地测试 openid。
+当前 `services/purchase.ts` 支持本地扫码测试模式：当 `services/runtime-config.ts` 选择开发配置时，小程序仍会调用 `wx.login()`，开发者工具扫码登录后会生成本地测试 openid。
 
 测试授权读取 `data/access.ts`，例如：
 
@@ -145,4 +145,4 @@ const access: Record<string, boolean> = {
 };
 ```
 
-将某个智能体改为 `true` 后，扫码登录即可进入对应题库。接入真实后端时，修改 `services/runtime-config.ts` 里的 production profile 配置，填入真实后台地址和云数据库设置，后端用 `code` 换取真实 openid 并返回 `agents` 授权即可。
+将某个智能体改为 `true` 后，扫码登录即可进入对应题库。接入真实后端时，修改 `services/runtime-config.ts` 里的生产配置，填入真实后台地址和云数据库设置，后端用 `code` 换取真实 openid 并返回 `agents` 授权即可。

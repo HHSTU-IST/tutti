@@ -1,19 +1,16 @@
 export interface RuntimeConfig {
-  profile: "development" | "production";
   wechatLoginApiUrl: string;
   enableLocalWechatTestLogin: boolean;
   enableCloudDatabase: boolean;
 }
 
 const DEVELOPMENT_RUNTIME_CONFIG: RuntimeConfig = {
-  profile: "development",
   wechatLoginApiUrl: "",
   enableLocalWechatTestLogin: true,
   enableCloudDatabase: false
 };
 
 const PRODUCTION_RUNTIME_CONFIG: RuntimeConfig = {
-  profile: "production",
   // Fill these for release builds.
   wechatLoginApiUrl: "",
   enableLocalWechatTestLogin: false,
