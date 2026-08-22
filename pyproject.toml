@@ -5,7 +5,7 @@ description = "Exam Simulator"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "defusedxml>=0.7.1",
+  "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]
@@ -16,10 +16,6 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]
@@ -40,44 +36,29 @@ skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 extend-select = [
-  "E",
-  "W",
-  "F",
-  "B",
-  "C4",
-  "EM",
-  "FA",
-  "G",
-  "INT",
-  "PIE",
-  "PT",
-  "PYI",
-  "Q",
-  "RET",
-  "RSE",
-  "SLOT",
-  "T10",
-  "YTT",
   "DTZ",
+  "E",
+  "F",
   "I",
   "ISC",
+  "NPY",
   "PERF",
   "RUF",
   "S",
   "SIM",
   "TID",
-  "UP"
+  "UP",
+  "W",
 ]
 fixable = ["ALL"]
 ignore = [
-  "EM101",
-  "EM102",
-  "ISC001",
   "E501",
+  "ISC001",
   "RUF001",
   "RUF002",
   "RUF003",
-  "S101"
+  "S101",
+  "S603",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -88,3 +69,7 @@ case-sensitive = true
 combine-as-imports = true
 force-wrap-aliases = true
 order-by-type = true
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
