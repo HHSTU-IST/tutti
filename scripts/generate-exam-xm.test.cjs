@@ -47,6 +47,7 @@ test("generate-exam-xm exports testable paper generation helpers", () => {
     });
 
     assert.match(paper, /机器学习概论/);
+    assert.doesNotMatch(paper, /\{\{[a-zA-Z]+\}\}/);
     assert.match(answer, /参考答案/);
     assert.equal(manifestEntry.version, "A");
     assert.equal(manifestEntry.courseCode, "xm");
@@ -72,6 +73,28 @@ test("generate-exam-xm exports testable paper generation helpers", () => {
     fs.writeFileSync = originalWriteFileSync;
     childProcess.spawnSync = originalSpawnSync;
     console.log = originalLog;
+    delete require.cache[require.resolve(scriptPath)];
+  }
+});
+
+test("fillTemplate keeps replacement-pattern characters and rejects missing values", () => {
+  delete require.cache[require.resolve(scriptPath)];
+
+  try {
+    const { fillTemplate } = require(scriptPath);
+
+    // 题干含 LaTeX（$P(Y|X)$ 等）时，字符串形式的替换值会把这些序列当成替换模式并静默改写题干。
+    assert.equal(fillTemplate("a {{x}} b", { x: "$&" }), "a $& b");
+    assert.equal(fillTemplate("{{a}}/{{b}}", { a: "$1", b: "$$" }), "$1/$$");
+    assert.equal(fillTemplate("[{{a}}]", { a: "$`" }), "[$`]");
+    assert.equal(fillTemplate("f(x)={{expr}}", { expr: "$P(Y|X)$" }), "f(x)=$P(Y|X)$");
+    assert.equal(fillTemplate("n={{n}}", { n: 42 }), "n=42");
+
+    assert.throws(
+      () => fillTemplate("{{paperCode}}", { paperCode: undefined }),
+      /没有取值/
+    );
+  } finally {
     delete require.cache[require.resolve(scriptPath)];
   }
 });

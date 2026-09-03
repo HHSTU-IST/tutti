@@ -1,11 +1,25 @@
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
-const templatePath = path.join(__dirname, "../docs/xm-template.md");
+// Resolved at call time so callers (and tests) can stub child_process.spawnSync.
+const childProcess = require("child_process");
+// Template is shared by every course: course-specific values are {{placeholders}}.
+const templatePath = path.join(__dirname, "../docs/exam-template.md");
 const examifPath = path.join(__dirname, "../docs/examif.json");
 const docxScriptPath = path.join(__dirname, "generate-exam-docx.py");
-const template = fs.readFileSync(templatePath, "utf8");
 const examif = JSON.parse(fs.readFileSync(examifPath, "utf8"));
+
+let templateCache = null;
+
+function getTemplate() {
+  if (templateCache !== null) return templateCache;
+
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`未找到试卷模板：${templatePath}。模板为各课程共用，课程名通过 {{courseName}} 占位符替换。`);
+  }
+
+  templateCache = fs.readFileSync(templatePath, "utf8");
+  return templateCache;
+}
 
 const DEFAULT_EXAM_LAYOUT = {
   school: "黄河科技学院",
@@ -30,7 +44,17 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
   const { getQuestions, pickRandomMany, normalizeQuestion, getQuestionText } = engine;
 
   function fillTemplate(text, values) {
-    return Object.keys(values).reduce((result, key) => result.replaceAll(`{{${key}}}`, values[key]), text);
+    return Object.keys(values).reduce((result, key) => {
+      const value = values[key];
+
+      if (value === undefined || value === null) {
+        throw new Error(`试卷模板占位符 {{${key}}} 没有取值，请检查 docs/examif.json 中的配置。`);
+      }
+
+      // 使用函数式 replacement：字符串形式的替换值会把题干里的 $& / $1 / $$ / $` 当成替换模式，
+      // 导致含 LaTeX 的题干被静默改写。
+      return result.replaceAll(`{{${key}}}`, () => String(value));
+    }, text);
   }
 
   function uniqueByQuestion(list) {
@@ -129,7 +153,7 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
   }
 
   function generateDocx(mdPath) {
-    const result = spawnSync("python3", [docxScriptPath, mdPath], {
+    const result = childProcess.spawnSync("python3", [docxScriptPath, mdPath], {
       encoding: "utf8",
       stdio: "pipe"
     });
@@ -196,7 +220,7 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     const calcBlock = calcQuestions.map((question, index) => renderCalc(question, index + calcStart)).join("\n\n");
     const essayBlock = essayQuestions.map((question, index) => renderEssay(question, index + essayStart)).join("\n\n");
 
-    const paper = fillTemplate(template, {
+    const paper = fillTemplate(getTemplate(), {
       school: DEFAULT_EXAM_LAYOUT.school,
       academicYear: spec.academicYear,
       term: spec.term,
@@ -309,6 +333,7 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
   return {
     buildManifestEntry,
     buildVersionArtifacts,
+    fillTemplate,
     loadExamSpec,
     makePaper,
     makePaperFileName,
