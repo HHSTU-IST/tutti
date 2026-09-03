@@ -3,6 +3,7 @@ import { CourseInfo, QuizBank, TopicBank, TopicItem } from "../types/quiz-bank";
 
 const pyBank = require("../data/topic-py") as QuizBank;
 const mlBank = require("../data/topic-ml") as QuizBank;
+const alBank = require("../data/topic-al") as QuizBank;
 
 export interface AgentDefinition extends CourseInfo {
   id: AgentKind;
@@ -39,6 +40,21 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
       ["tree", "树模型"],
       ["rl", "强化学习"],
       ["calc", "计算题"]
+    ]
+  },
+  al: {
+    id: "al",
+    title: "数据结构与算法刷题助手",
+    bank: alBank,
+    fallbackTopics: [
+      ["complex", "复杂度分析"],
+      ["array", "数组与字符串"],
+      ["linked", "链表"],
+      ["stack", "栈与队列"],
+      ["tree", "树与二叉树"],
+      ["graph", "图"],
+      ["sort", "排序算法"],
+      ["dp", "动态规划"]
     ]
   }
 };
