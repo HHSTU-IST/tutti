@@ -58,7 +58,7 @@ hh-tutor/
 - [x] `py`：Python 编程
 - [x] `al`：数据结构与算法
 - [x] `ml`：机器学习
-- [ ] `cv`：图像处理
+- [x] `cv`：图像处理
 - [ ] `dl`：深度学习
 
 ### 核心技术实现
@@ -133,7 +133,7 @@ hh-tutor/
 - 对应题库文件
 - `services/registry.ts` 中的智能体注册表
 
-> 参考示例：数据结构与算法智能体 `al` 已完整接入——题库在 `data/topic-al.ts`，注册见 `services/registry.ts` 的 `AGENT_REGISTRY.al`，本地测试开关见 `data/access.ts`（开发环境置 `true` 即可扫码进入）。
+> 参考示例：数据结构与算法智能体 `al` 与图像处理智能体 `cv` 均已完整接入——题库分别在 `data/topic-al.ts`、`data/topic-cv.ts`，注册见 `services/registry.ts` 的 `AGENT_REGISTRY`，本地测试开关见 `data/access.ts`（开发环境置 `true` 即可扫码进入）。
 
 ## 扫码测试登录
 

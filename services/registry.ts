@@ -4,6 +4,7 @@ import { CourseInfo, QuizBank, TopicBank, TopicItem } from "../types/quiz-bank";
 const pyBank = require("../data/topic-py") as QuizBank;
 const mlBank = require("../data/topic-ml") as QuizBank;
 const alBank = require("../data/topic-al") as QuizBank;
+const cvBank = require("../data/topic-cv") as QuizBank;
 
 export interface AgentDefinition extends CourseInfo {
   id: AgentKind;
@@ -55,6 +56,22 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
       ["graph", "图"],
       ["sort", "排序算法"],
       ["dp", "动态规划"]
+    ]
+  },
+  cv: {
+    id: "cv",
+    title: "图像处理刷题助手",
+    bank: cvBank,
+    fallbackTopics: [
+      ["base", "基础概念"],
+      ["image", "图像表示"],
+      ["color", "颜色空间"],
+      ["filter", "滤波卷积"],
+      ["edge", "边缘与形态学"],
+      ["feature", "特征与匹配"],
+      ["geometry", "几何变换"],
+      ["deep", "深度视觉"],
+      ["eval", "评价指标"]
     ]
   }
 };
