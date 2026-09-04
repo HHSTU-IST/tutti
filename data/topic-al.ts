@@ -131,6 +131,12 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": "O(n)",
                 "difficulty": "易",
                 "explain": "忽略常数 3 与常数 5，渐进复杂度为 O(n)。"
+            },
+            {
+                "question": "二分查找每轮把区间对半，其时间复杂度为 ____。",
+                "answer": "O(log n)",
+                "difficulty": "易",
+                "explain": "每轮规模减半，最多进行 log₂n 轮。"
             }
         ]
     },
@@ -301,6 +307,12 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": "快慢",
                 "difficulty": "中",
                 "explain": "快慢指针若相遇则说明有环。"
+            },
+            {
+                "question": "在单链表中删除某个节点，需要修改其 ____ 节点的 next 指针。",
+                "answer": "前驱",
+                "difficulty": "中",
+                "explain": "单链表只能单向遍历，必须借助前驱节点完成摘链。"
             }
         ]
     },
@@ -618,6 +630,12 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": "分治",
                 "difficulty": "中",
                 "explain": "分治把大问题拆成小问题再合并结果。"
+            },
+            {
+                "question": "堆排序与归并排序在最坏情况下的时间复杂度都是 ____。",
+                "answer": "O(n log n)",
+                "difficulty": "中",
+                "explain": "两者最坏情况都能保持 n log n，不像快排会退化到 O(n²)。"
             }
         ]
     },
@@ -708,6 +726,12 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": "最大",
                 "difficulty": "中",
                 "explain": "DP 求的是在容量限制下能取得的最大总价值。"
+            },
+            {
+                "question": "能用动态规划求解的问题，需要同时具备最优子结构和 ____ 两个性质。",
+                "answer": "子问题重叠",
+                "difficulty": "难",
+                "explain": "重叠子问题使得记忆化/递推能避免重复计算，是 DP 优于暴力的前提。"
             }
         ]
     }

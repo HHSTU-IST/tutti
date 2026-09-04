@@ -161,6 +161,18 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": false,
                 "explain": "/ 浮点除法结果为3.0，// 才是整数除法。"
             }
+        ],
+        "fill": [
+            {
+                "question": "Python 中把对象绑定到名字上的语句称为 ____ 语句。",
+                "answer": "赋值",
+                "explain": "x = 1 即赋值语句，名字 x 绑定到整数对象 1。"
+            },
+            {
+                "question": "查看一个对象的数据类型，需要调用内置函数 ____。",
+                "answer": "type",
+                "explain": "type(obj) 返回该对象所属的类型。"
+            }
         ]
     },
     "flow": {
@@ -295,6 +307,18 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": false,
                 "explain": "None视为False，循环不会执行。"
             }
+        ],
+        "fill": [
+            {
+                "question": "在循环中跳过本轮剩余代码、直接进入下一轮，应使用 ____ 语句。",
+                "answer": "continue",
+                "explain": "continue 只结束本轮，break 才会终止整个循环。"
+            },
+            {
+                "question": "if/elif/else 中所有条件都不成立时，会执行 ____ 分支。",
+                "answer": "else",
+                "explain": "else 分支可选，用来处理兜底情况。"
+            }
         ]
     },
     "func": {
@@ -428,6 +452,18 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "question": "def test(a=10):pass 默认参数写法合法",
                 "answer": true,
                 "explain": "函数默认参数定义规范。"
+            }
+        ],
+        "fill": [
+            {
+                "question": "Python 中使用 ____ 关键字定义函数。",
+                "answer": "def",
+                "explain": "写法为 def 函数名(参数):，冒号后缩进书写函数体。"
+            },
+            {
+                "question": "函数要把计算结果交给调用方，需要使用 ____ 关键字。",
+                "answer": "return",
+                "explain": "没有 return 的函数默认返回 None。"
             }
         ]
     },
@@ -627,6 +663,18 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": true,
                 "explain": "重写是多态核心实现方式。"
             }
+        ],
+        "fill": [
+            {
+                "question": "类中方法的第一个参数约定命名为 ____，代表实例本身。",
+                "answer": "self",
+                "explain": "self 只是命名约定，调用时由解释器自动传入实例。"
+            },
+            {
+                "question": "创建实例时自动执行的初始化方法名为 ____。",
+                "answer": "__init__",
+                "explain": "__init__ 在对象创建后自动调用，用于初始化实例属性。"
+            }
         ]
     },
     "decorator": {
@@ -750,6 +798,13 @@ const data: import("../types/quiz-bank").QuizBank = {
                 "answer": true,
                 "explain": "项目中非常常用。"
             }
+        ],
+        "fill": [
+            {
+                "question": "装饰器语法使用 ____ 符号写在函数定义的上方。",
+                "answer": "@",
+                "explain": "@deco 写在 def 上方，等价于 func = deco(func)。"
+            }
         ]
     },
     "magic": {
@@ -828,7 +883,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "__new__",
                     "__del__"
                 ],
-                "answer": 1
+                "answer": 1,
+                "explain": "print(obj) 会调用 obj.__str__() 并把返回值输出。"
             },
             {
                 "question": "a + b 底层调用？",
@@ -838,7 +894,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "__sum__",
                     "__join__"
                 ],
-                "answer": 0
+                "answer": 0,
+                "explain": "a + b 等价于 a.__add__(b)，重载该方法即可自定义加法行为。"
             }
         ],
         "judge": [
@@ -874,7 +931,15 @@ const data: import("../types/quiz-bank").QuizBank = {
             },
             {
                 "question": "len(obj) 想要生效必须重写__len__",
-                "answer": true
+                "answer": true,
+                "explain": "len(obj) 实际调用 obj.__len__()，未重写则报 TypeError。"
+            }
+        ],
+        "fill": [
+            {
+                "question": "魔法方法名称的前后各带 ____ 个下划线。",
+                "answer": "两",
+                "explain": "如 __init__、__str__，前后各两个下划线，也称 dunder 方法。"
             }
         ]
     },
@@ -943,7 +1008,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "生成器",
                     "字典"
                 ],
-                "answer": 2
+                "answer": 2,
+                "explain": "圆括号包裹的推导式是生成器表达式，惰性产出，不一次性生成列表。"
             },
             {
                 "question": "def gen():yield 5;g=gen()  g的类型？",
@@ -953,7 +1019,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "int",
                     "None"
                 ],
-                "answer": 1
+                "answer": 1,
+                "explain": "调用含 yield 的函数不会立即执行，而是返回一个 generator 对象。"
             }
         ],
         "judge": [
@@ -989,11 +1056,20 @@ const data: import("../types/quiz-bank").QuizBank = {
             },
             {
                 "question": "生成器相比列表更适合大数据处理",
-                "answer": true
+                "answer": true,
+                "explain": "生成器惰性产出、不一次性占用内存，适合无法整体装入内存的数据流。"
             },
             {
                 "question": "yield 可以多次暂停恢复函数",
-                "answer": true
+                "answer": true,
+                "explain": "yield 保存函数现场并交出控制权，下次 next() 从暂停处继续。"
+            }
+        ],
+        "fill": [
+            {
+                "question": "函数中出现 ____ 关键字，它就变成生成器函数。",
+                "answer": "yield",
+                "explain": "调用生成器函数不会立即执行，而是返回一个生成器对象。"
             }
         ]
     },
@@ -1029,7 +1105,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "socket",
                     "time"
                 ],
-                "answer": 1
+                "answer": 1,
+                "explain": "threading 是标准库中的多线程模块，multiprocessing 用于多进程。"
             },
             {
                 "question": "CPU密集型适合？",
@@ -1050,7 +1127,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "asyncio",
                     "logging"
                 ],
-                "answer": 1
+                "answer": 1,
+                "explain": "multiprocessing 通过子进程绕开 GIL，适合 CPU 密集型任务。"
             },
             {
                 "question": "GIL存在于哪个解释器？",
@@ -1060,7 +1138,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "Jython",
                     "全部"
                 ],
-                "answer": 0
+                "answer": 0,
+                "explain": "GIL 是 CPython 解释器的实现产物，Jython、IronPython 没有 GIL。"
             },
             {
                 "question": "创建线程对象的类是？",
@@ -1070,7 +1149,8 @@ const data: import("../types/quiz-bank").QuizBank = {
                     "Task",
                     "Worker"
                 ],
-                "answer": 0
+                "answer": 0,
+                "explain": "threading.Thread(target=...) 创建线程，multiprocessing.Process 创建进程。"
             }
         ],
         "judge": [
@@ -1101,15 +1181,25 @@ const data: import("../types/quiz-bank").QuizBank = {
             },
             {
                 "question": "线程池减少频繁创建线程开销",
-                "answer": true
+                "answer": true,
+                "explain": "线程池复用已创建的线程，避免反复创建销毁的开销。"
             },
             {
                 "question": "<span class='code-inline'>import threading</span> 导入线程模块",
-                "answer": true
+                "answer": true,
+                "explain": "threading 模块提供 Thread、Lock、Condition 等并发原语。"
             },
             {
                 "question": "多进程之间默认内存隔离不共享",
-                "answer": true
+                "answer": true,
+                "explain": "每个进程有独立地址空间，需借助 Queue、Pipe 或共享内存通信。"
+            }
+        ],
+        "fill": [
+            {
+                "question": "为保证同一时刻只有一个线程修改共享数据，需要使用 ____。",
+                "answer": "锁",
+                "explain": "threading.Lock 的 acquire/release 保证临界区互斥访问。"
             }
         ]
     },

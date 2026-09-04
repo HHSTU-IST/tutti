@@ -63,7 +63,17 @@ declare namespace wx {
   function navigateTo(options: { url: string }): void;
   function redirectTo(options: { url: string }): void;
   function setNavigationBarTitle(options: { title: string }): void;
-  function showToast(options: { title: string; icon?: "success" | "loading" | "none" }): void;
+  function showToast(options: {
+    title: string;
+    icon?: "success" | "loading" | "none";
+    duration?: number;
+  }): void;
+  function setClipboardData(options: {
+    data: string;
+    success?(): void;
+    fail?(): void;
+    complete?(): void;
+  }): void;
   function login(options: {
     success?(result: LoginSuccessCallbackResult): void;
     fail?(error: GeneralCallbackResult): void;

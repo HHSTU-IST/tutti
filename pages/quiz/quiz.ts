@@ -82,6 +82,8 @@ interface QuizPageInstance {
   topicDone: Record<string, number>;
   userProfile: UserProfile | null;
   wechatOpenId: string;
+  examQuestions: QuizQuestion[];
+  examIndex: number;
   refreshDeviceInfo(): void;
   goHome(): void;
   loadPurchasedAgent(): Promise<void>;
@@ -138,7 +140,9 @@ Page<QuizData, QuizPageInstance>({
     isCorrect: false,
     errorList: [],
     hasNoErrors: true,
-    showErrorBook: false
+    showErrorBook: false,
+    examMode: false,
+    examProgressText: ""
   },
 
   bank: DEFAULT_BANK,
@@ -334,13 +338,20 @@ Page<QuizData, QuizPageInstance>({
   },
 
   startExam() {
+    const sections: Array<[QuestionType, number, string]> = [
+      ["single", 20, "单选题"],
+      ["judge", 10, "判断题"],
+      ["fill", 10, "填空题"]
+    ];
     const questions: QuizQuestion[] = [];
-    ([
-      ["single", 20],
-      ["judge", 10],
-      ["fill", 10]
-    ] as Array<[QuestionType, number]>).forEach(([type, count]) => {
-      pickRandomMany(this.getAllQuestions(type), count).forEach(question => {
+    const shortfall: string[] = [];
+
+    sections.forEach(([type, count, label]) => {
+      const picked = pickRandomMany(this.getAllQuestions(type), count);
+      if (picked.length < count) {
+        shortfall.push(`${label}仅 ${picked.length}/${count} 题`);
+      }
+      picked.forEach(question => {
         questions.push(this.normalizeQuestion(question, type, question.topic || ""));
       });
     });
@@ -359,6 +370,15 @@ Page<QuizData, QuizPageInstance>({
       examProgressText: `1/${questions.length}`
     });
     this.showQuestion(questions[0]);
+
+    // pickRandomMany 会在题量不足时静默截断，这里显式告知用户，避免误以为试卷完整。
+    if (shortfall.length) {
+      wx.showToast({
+        title: `题库不足：${shortfall.join("，")}`,
+        icon: "none",
+        duration: 3000
+      });
+    }
   },
 
   nextExamQuestion() {
