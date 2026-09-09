@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-import defusedxml.ElementTree as DefusedET
+import defusedxml.ElementTree as DefusedET  # type: ignore
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -154,7 +154,7 @@ def load_export_config() -> dict:
             return
 
         if not isinstance(node, dict):
-            raise KeyError(f"Missing export config key: {path}")
+            raise TypeError(f"Expected dict at {path}, got {type(node).__name__}")
 
         for key, child_schema in schema.items():
             child_path = f"{path}.{key}" if path else key
@@ -177,7 +177,7 @@ def load_latex_replacements() -> dict:
         config = json.load(handle)
 
     if not isinstance(config, dict):
-        raise ValueError("LaTeX replacements config must be a JSON object")
+        raise TypeError("LaTeX replacements config must be a JSON object")
 
     for key in ("normalizeMathMarkdown", "latexInlineReadable"):
         value = config.get(key)
@@ -327,14 +327,29 @@ def set_table_borders(table: ET.Element, style: str) -> None:
     if tbl_borders is None:
         tbl_borders = ET.SubElement(tbl_pr, qn("w:tblBorders"))
 
+    border_val = "nil" if style.lower() in ("none", "nil") else style
     for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
         border = tbl_borders.find(f"w:{side}", NS)
         if border is None:
             border = ET.SubElement(tbl_borders, qn(f"w:{side}"))
-        border.set(qn("w:val"), style)
+        border.set(qn("w:val"), border_val)
         border.set(qn("w:sz"), "8")
         border.set(qn("w:space"), "0")
-        border.set(qn("w:color"), "000000")
+        border.set(qn("w:color"), "auto")
+
+    if border_val == "nil":
+        for cell in table.findall(".//w:tc", NS):
+            tc_pr = cell.find("w:tcPr", NS)
+            if tc_pr is None:
+                tc_pr = ET.SubElement(cell, qn("w:tcPr"))
+            tc_borders = tc_pr.find("w:tcBorders", NS)
+            if tc_borders is None:
+                tc_borders = ET.SubElement(tc_pr, qn("w:tcBorders"))
+            for side in ("top", "left", "bottom", "right"):
+                border = tc_borders.find(f"w:{side}", NS)
+                if border is None:
+                    border = ET.SubElement(tc_borders, qn(f"w:{side}"))
+                border.set(qn("w:val"), "nil")
 
 
 def apply_text_format(parent: ET.Element, font_cfg: dict) -> None:
@@ -580,6 +595,11 @@ def build_option_table(segments: list[tuple[str, str]]) -> ET.Element:
             tc_w.set(qn("w:type"), "dxa")
             tc_w.set(qn("w:w"), str(column_width))
 
+            tc_borders = ET.SubElement(tc_pr, qn("w:tcBorders"))
+            for side in ("top", "left", "bottom", "right"):
+                border = ET.SubElement(tc_borders, qn(f"w:{side}"))
+                border.set(qn("w:val"), "nil")
+
             paragraph = ET.SubElement(cell, qn("w:p"))
             ppr = ET.SubElement(paragraph, qn("w:pPr"))
             set_alignment(ppr, "left")
@@ -633,7 +653,7 @@ def create_footer_xml(footer_path: Path) -> None:
 
 
 def patch_content_types(content_types_path: Path) -> None:
-    tree = ET.parse(content_types_path)
+    tree = DefusedET.parse(content_types_path)
     root = tree.getroot()
     footer_part = "/word/footer1.xml"
 
@@ -652,7 +672,7 @@ def patch_content_types(content_types_path: Path) -> None:
 
 
 def patch_document_relationships(rels_path: Path) -> str:
-    tree = ET.parse(rels_path)
+    tree = DefusedET.parse(rels_path)
     root = tree.getroot()
     footer_target = "footer1.xml"
     footer_type = (
@@ -662,6 +682,7 @@ def patch_document_relationships(rels_path: Path) -> str:
     for rel in root.findall(f"{{{PKG_REL_NS}}}Relationship"):
         if rel.get("Type") == footer_type and rel.get("Target") == footer_target:
             rel_id = rel.get("Id")
+            assert rel_id is not None
             tree.write(rels_path, encoding="utf-8", xml_declaration=True)
             return rel_id
 
@@ -723,7 +744,7 @@ def patch_footer_package(work_dir: Path) -> str:
 
 
 def patch_styles(styles_path: Path) -> None:
-    tree = ET.parse(styles_path)
+    tree = DefusedET.parse(styles_path)
     root = tree.getroot()
     rules_cfg = EXPORT_CONFIG["rules"]
     title_cfg = style_cfg("firstTitle")
@@ -799,6 +820,7 @@ def patch_paragraph(paragraph: ET.Element, heading1_index: int) -> int:
     ppr = ensure_ppr(paragraph)
     pstyle = ppr.find("w:pStyle", NS)
     style_id = pstyle.get(qn("w:val")) if pstyle is not None else "Normal"
+    assert style_id is not None
     rules_cfg = EXPORT_CONFIG["rules"]
     if style_id == heading_style_id(int(rules_cfg["titleLevel"])):
         heading1_index += 1
@@ -881,7 +903,7 @@ def normalize_question_numbering(text: str) -> str:
 
 
 def patch_document(document_path: Path, footer_rel_id: str) -> None:
-    tree = ET.parse(document_path)
+    tree = DefusedET.parse(document_path)
     root = tree.getroot()
 
     body = root.find("w:body", NS)
@@ -987,7 +1009,7 @@ def generate_docx(input_md: Path, output_docx: Path) -> None:
 
         subprocess.run(
             [
-                "pandoc",
+                shutil.which("pandoc") or "pandoc",
                 "-f",
                 "gfm+tex_math_dollars",
                 str(cleaned_md),
