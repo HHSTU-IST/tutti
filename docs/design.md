@@ -90,7 +90,7 @@ exam 信息需要从 `examif.json` 中读取
 
 #### 核心脚本
 
-1. **`scripts/generate-exam-xm.cjs`** - 试卷生成主程序
+1. **`scripts/generate-exam-ml.cjs`** - 试卷生成主程序
    - 从题库按知识点权重随机抽题
    - 填充 `exam-template.md` 模板生成 Markdown 试卷
    - 调用 Python 脚本导出 Word 文档

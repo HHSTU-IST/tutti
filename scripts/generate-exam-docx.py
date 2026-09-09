@@ -21,7 +21,7 @@ CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 NS = {"w": W_NS}
 
 EXPORT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "docs" / "export.json"
-DEFAULT_INPUT_MD = Path(__file__).resolve().parents[1] / "docs" / "xm-2025-2-A.md"
+DEFAULT_INPUT_MD = Path(__file__).resolve().parents[1] / "docs" / "xm-2025-2-B.md"
 LATEX_REPLACEMENTS_PATH = (
     Path(__file__).resolve().parents[1] / "docs" / "latex-replace.json"
 )

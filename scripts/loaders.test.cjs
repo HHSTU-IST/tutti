@@ -3,13 +3,13 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 
-const scriptPath = path.join(__dirname, "generate-exam-xm.cjs");
+const scriptPath = path.join(__dirname, "generate-exam-ml.cjs");
 const quizLoaderPath = path.join(__dirname, "load-quiz-engine.cjs");
 const topicLoaderPath = path.join(__dirname, "load-topic-bank.cjs");
 const { loadQuizEngine } = require("./load-quiz-engine.cjs");
 const { loadTopicBank } = require("./load-topic-bank.cjs");
 
-test("generate-exam-xm uses explicit loaders for runtime TypeScript modules", () => {
+test("generate-exam-ml uses explicit loaders for runtime TypeScript modules", () => {
   const source = fs.readFileSync(scriptPath, "utf8");
 
   assert.match(source, /loadQuizEngine\s*\(/);

@@ -4,9 +4,9 @@ const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
 
-const scriptPath = path.join(__dirname, "generate-exam-xm.cjs");
+const scriptPath = path.join(__dirname, "generate-exam-ml.cjs");
 
-test("generate-exam-xm test stays focused on paper generation behavior", () => {
+test("generate-exam-ml test stays focused on paper generation behavior", () => {
   const source = fs.readFileSync(__filename, "utf8");
 
   assert.doesNotMatch(source, /load-quiz-engine\.cjs/);
@@ -14,16 +14,16 @@ test("generate-exam-xm test stays focused on paper generation behavior", () => {
   assert.doesNotMatch(source, /load-ts-module\.cjs/);
 });
 
-test("generate-exam-xm exports testable paper generation helpers", () => {
+test("generate-exam-ml exports testable paper generation helpers", () => {
   delete require.cache[require.resolve(scriptPath)];
 
   const originalWriteFileSync = fs.writeFileSync;
   const originalSpawnSync = childProcess.spawnSync;
   const originalLog = console.log;
 
-  fs.writeFileSync = () => {};
+  fs.writeFileSync = () => { };
   childProcess.spawnSync = () => ({ status: 0, stdout: "", stderr: "" });
-  console.log = () => {};
+  console.log = () => { };
 
   try {
     const examModule = require(scriptPath);
@@ -243,7 +243,7 @@ test("runCli can generate a selected version list", () => {
     spawns.push({ command, args });
     return { status: 0, stdout: "", stderr: "" };
   };
-  console.log = () => {};
+  console.log = () => { };
 
   try {
     const examModule = require(scriptPath);
