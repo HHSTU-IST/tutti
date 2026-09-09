@@ -152,6 +152,25 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     return `${spec.courseCode}-${spec.yearRaw}-${spec.termRaw}-${version}`;
   }
 
+  function ensureLatexBlankLines(text) {
+    // For every non-empty line that contains a LaTeX formula ($...$ or $$...$$),
+    // ensure it is followed by a blank line so the formula is visually separated
+    // from the next line of content.
+    const lines = text.split("\n");
+    const result = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      result.push(line);
+      const isLaTeXLine = line.includes("$");
+      const nextLine = lines[i + 1];
+      const hasNextBlank = nextLine === undefined || nextLine.trim() === "";
+      if (isLaTeXLine && !hasNextBlank) {
+        result.push("");
+      }
+    }
+    return result.join("\n");
+  }
+
   function formatMarkdown(mdPath) {
     const rumdlBin = process.env.RUMDL || "rumdl";
     const result = childProcess.spawnSync(rumdlBin, ["format", mdPath], {
@@ -164,6 +183,10 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
       const stdout = (result.stdout || "").trim();
       throw new Error(`Markdown格式化失败：${mdPath}\n${stderr || stdout || result.error?.message || "unknown error"}`);
     }
+
+    // Apply LaTeX blank-line spacing after rumdl so it survives formatting.
+    const formatted = fs.readFileSync(mdPath, "utf8");
+    fs.writeFileSync(mdPath, ensureLatexBlankLines(formatted));
 
     const output = (result.stdout || "").trim();
     if (output) console.log(output);
