@@ -153,7 +153,8 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
   }
 
   function generateDocx(mdPath) {
-    const result = childProcess.spawnSync("python3", [docxScriptPath, mdPath], {
+    const pythonBin = process.env.PYTHON || "python3";
+    const result = childProcess.spawnSync(pythonBin, [docxScriptPath, mdPath], {
       encoding: "utf8",
       stdio: "pipe"
     });
@@ -190,6 +191,14 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
 
   function renderEssay(question, index) {
     return `${index}. ${ensureSentenceEnding(question.question)}`;
+  }
+
+  function joinGrouped(items, perLine) {
+    const lines = [];
+    for (let i = 0; i < items.length; i += perLine) {
+      lines.push(items.slice(i, i + perLine).join(" "));
+    }
+    return lines.join("\n");
   }
 
   function sectionTotal(count, score) {
@@ -242,15 +251,15 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
       ``,
       `## 一、单项选择题（每小题${DEFAULT_EXAM_LAYOUT.singleScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.singleCount, DEFAULT_EXAM_LAYOUT.singleScore)}分）`,
       ``,
-      single.map((q, i) => `${i + singleStart}. ${q.correctAnswer}`).join(" "),
+      joinGrouped(single.map((q, i) => `${i + singleStart}. ${q.correctAnswer}`), 5),
       ``,
       `## 二、判断题（每小题${DEFAULT_EXAM_LAYOUT.judgeScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.judgeCount, DEFAULT_EXAM_LAYOUT.judgeScore)}分）`,
       ``,
-      judge.map((q, i) => `${i + judgeStart}. ${q.correctAnswer === "A" ? "T" : "F"}`).join(" "),
+      joinGrouped(judge.map((q, i) => `${i + judgeStart}. ${q.correctAnswer === "A" ? "T" : "F"}`), 5),
       ``,
       `## 三、填空题（每小题${DEFAULT_EXAM_LAYOUT.fillScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.fillCount, DEFAULT_EXAM_LAYOUT.fillScore)}分）`,
       ``,
-      fill.map((q, i) => `${i + fillStart}. ${q.options[0].text}`).join("\n"),
+      joinGrouped(fill.map((q, i) => `${i + fillStart}. ${q.options[0].text}`), 5),
       ``,
       `## 四、计算题（每小题${DEFAULT_EXAM_LAYOUT.calcScore}分，共${sectionTotal(DEFAULT_EXAM_LAYOUT.calcCount, DEFAULT_EXAM_LAYOUT.calcScore)}分）`,
       ``,

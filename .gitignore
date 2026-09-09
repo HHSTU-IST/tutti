@@ -13,15 +13,13 @@
 *.mp4
 *.docx
 
-docs/xm-*
-
+docs/ml-*
 !final-*.docx
 
 # Node
 *.lock
 
+.workbuddy
+miniprogram_npm
 node_modules
 dist
-miniprogram_npm
-
-.workbuddy
