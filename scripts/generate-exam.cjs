@@ -152,6 +152,23 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     return `${spec.courseCode}-${spec.yearRaw}-${spec.termRaw}-${version}`;
   }
 
+  function formatMarkdown(mdPath) {
+    const rumdlBin = process.env.RUMDL || "rumdl";
+    const result = childProcess.spawnSync(rumdlBin, ["format", mdPath], {
+      encoding: "utf8",
+      stdio: "pipe"
+    });
+
+    if (result.error || result.status !== 0) {
+      const stderr = (result.stderr || "").trim();
+      const stdout = (result.stdout || "").trim();
+      throw new Error(`Markdown格式化失败：${mdPath}\n${stderr || stdout || result.error?.message || "unknown error"}`);
+    }
+
+    const output = (result.stdout || "").trim();
+    if (output) console.log(output);
+  }
+
   function generateDocx(mdPath) {
     const pythonBin = process.env.PYTHON || "python3";
     const result = childProcess.spawnSync(pythonBin, [docxScriptPath, mdPath], {
@@ -311,6 +328,8 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
   function publishGeneratedArtifacts({ manifestEntry, paper, answer }) {
     fs.writeFileSync(manifestEntry.outPaper, paper);
     fs.writeFileSync(manifestEntry.outAnswer, answer);
+    formatMarkdown(manifestEntry.outPaper);
+    formatMarkdown(manifestEntry.outAnswer);
     console.log(manifestEntry.outPaper);
     console.log(manifestEntry.outAnswer);
     generateDocx(manifestEntry.outPaper);
