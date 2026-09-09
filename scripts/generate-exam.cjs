@@ -36,7 +36,7 @@ const DEFAULT_EXAM_LAYOUT = {
 };
 
 const COURSE_NAME_MAP = {
-  xm: "机器学习概论",
+  ml: "机器学习概论",
   cv: "计算机视觉基础"
 };
 

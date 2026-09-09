@@ -5,7 +5,7 @@ const { loadTopicBank } = require("./load-topic-bank.cjs");
 module.exports = createExamGenerator({
   engine: loadQuizEngine(),
   bank: loadTopicBank("ml"),
-  courseCode: "xm",
+  courseCode: "ml",
   topicOrder: ["base", "reg", "classify", "cluster", "overfit", "tree", "rl", "calc"],
   topicNames: {
     base: "基础概念",
@@ -18,7 +18,7 @@ module.exports = createExamGenerator({
     calc: "计算题"
   },
   fillPerTopic: 2,
-  defaultFileName: "xm-2026-1-A.md"
+  defaultFileName: "ml-2026-1-A.md"
 });
 
 if (require.main === module) {
