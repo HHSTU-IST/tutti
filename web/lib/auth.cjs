@@ -4,7 +4,11 @@ const crypto = require("crypto");
 
 const { catalog } = require("./banks.cjs");
 
-const ACCOUNTS_PATH = path.join(__dirname, "../../data/accounts.json");
+// 账号表解析顺序：测试用临时文件 > web/data 下的发布副本 > 仓库 data/accounts.json。
+const BUNDLED_ACCOUNTS = path.join(__dirname, "../data/accounts.json");
+const REPO_ACCOUNTS = path.join(__dirname, "../../data/accounts.json");
+const ACCOUNTS_PATH = process.env.TUTTI_ACCOUNTS_PATH
+  || (fs.existsSync(BUNDLED_ACCOUNTS) ? BUNDLED_ACCOUNTS : REPO_ACCOUNTS);
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PBKDF2_ITERATIONS = 120000;
 const SESSION_COOKIE = "sid";

@@ -14,6 +14,70 @@ hh-tutor 为原生微信小程序，不使用 Vite、Vue 或前端进行依赖�
 - **用户数据库**: 微信云数据库集合 `user_profiles`
 - **运行开关**: `services/runtime-config.ts`，会根据小程序环境自动选择开发 / 生产配置
 
+## 部署与运行
+
+两条发布通道共用 `data/topic-*.ts` 这一份题库，可只上一边，也可两边都上。
+
+| 通道 | 入口 | 登录方式 | 运行形态 |
+| --- | --- | --- | --- |
+| 网页版 | `web/` | 账号密码（自建账号表） | Node HTTP 服务，单端口 |
+| 微信小程序 | 仓库根目录 | 微信登录 + 后台授权 | 微信开发者工具上传发布 |
+
+### 网页版部署
+
+```bash
+# 1) 生成运行数据（改过题库或账号后必须重跑，只需 Node ≥ 22.6）
+node scripts/build-web-bundle.cjs
+
+# 2) 初始化账号（仅首次）
+node scripts/manage-accounts.cjs init
+
+# 3) 启动（无第三方依赖，不需要 npm install）
+PORT=3000 HOST=0.0.0.0 node web/server.js
+```
+
+- **单机 / 容器**：任何能跑 Node 的主机起这一个进程，前面挂 Nginx 做 HTTPS 与反向代理即可。
+- **WorkBuddy「发布为应用」**：目录选 `web/`，语言 `node`，启动命令 `node server.js`。注意发布只上传该目录，所以**必须先跑构建脚本**生成自包含数据；服务需监听 `PORT` 并绑定 `0.0.0.0`（已默认如此）。
+
+网页版部署清单：
+
+- [ ] 改掉默认密码 `admin2026` / `demo2026`（`node scripts/manage-accounts.cjs passwd <账号> <新密码>`）
+- [ ] `data/accounts.json` 与 `web/data/` 含账号哈希与上传文件，别进公开仓库，注意目录权限
+- [ ] 会话存在进程内存，重启会掉线；多实例部署要换成共享存储
+- [ ] `web/data/uploads/` 与 `web/data/upload-rules.json` 需要持久化，否则管理员设的上传规则会丢
+
+### 小程序部署
+
+1. 用**微信开发者工具**（稳定版）导入仓库根目录；`project.config.json` 里的 `appid` 目前是 `wxf7f1812c7c4f4106`，换成自己的需在微信公众平台注册后修改该字段。
+2. **本地调试**：把 `data/access.ts` 里要测的课程置为 `true`，开发者工具扫码登录即可进入（详见「扫码测试登录」）。
+3. **接后台授权**：填 `services/runtime-config.ts` 中 `PRODUCTION_RUNTIME_CONFIG.wechatLoginApiUrl`。**当前为空，不填线上会白屏**——这是发布前最容易被漏掉的一项。
+4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。`app.ts` 里 `wx.cloud.init()` 未指定 `env`，走默认环境；多环境需自行补 `env` 参数。
+5. **发布**：开发者工具右上角「上传」填版本号 → 微信公众平台「版本管理」提交审核 → 审核通过点「发布」。体验版（`envVersion=trial`）与正式版走同一套生产配置，可先拿它做真机验证。
+
+小程序发布清单：
+
+- [ ] `wechatLoginApiUrl` 已填且为 HTTPS
+- [ ] 云环境已建 `user_profiles` 集合
+- [ ] `data/access.json` 生产默认全 `false`（开通与否由后台 `agents` 返回决定）
+- [ ] trial 体验版真机跑通再提审
+
+## 使用说明
+
+### 学员
+
+**网页版**：打开网址 → 用管理员给的账号密码登录 → 首页列出全部题库，已开通的可点进入，未开通显示「未开通」→ 选专题（或「全部专题（混合）」）→ 选题量与题型 → 开始练习 → 逐题作答，提交后立刻显示对错与解析（填空需手输答案）→ 答完显示正确率。
+
+**微信小程序**：微信中打开小程序，自动完成微信登录 → 首页列出全部课程，已购课程显示「进入练习」→ 进入后按专题刷题，统计、进度、错题本按课程分开保存。
+
+两边共用同一份题库与同一套专题划分，但**登录体系与数据不互通**：小程序按微信 openid + 后台授权，网页版按账号密码，答题记录分别存在微信云数据库和网页服务端。
+
+### 管理员
+
+1. 用 `admin` 账号登录网页版，**全部题库自动解锁**（普通账号只能进已登记的课程）。
+2. **开通课程**：`node scripts/manage-accounts.cjs courses <账号> py,ml` 调整该账号的已购课程。
+3. **上传规则**：课程页底部「上传规则设置」面板改允许格式、文件名正则、命名说明、大小上限，保存后对所有学员的后续上传立即生效。格式与命名的校验在服务端，改前端绕不过。
+4. 小程序的课程开通走另一套：由后台在 `agents` 里对应用户返回 `true`，不需要在网页端操作。
+
 ## 主要功能
 
 - 界面
@@ -29,8 +93,8 @@ hh-tutor 为原生微信小程序，不使用 Vite、Vue 或前端进行依赖�
 - 自定义内容
   - [x] 题库预导入
 - 登录
-  - [x] 微信登录
-  - [x] 禁止账号密码等其他登录方式
+  - [x] 微信登录（小程序端，不提供账号密码等其他方式）
+  - [x] 账号密码登录（网页端，自建账号表）
 - 导出
   - [x] 导出试卷
   - [x] 导出错题本
@@ -42,13 +106,14 @@ hh-tutor 为原生微信小程序，不使用 Vite、Vue 或前端进行依赖�
 
 ```text
 hh-tutor/
-├── data/           # 题库数据
+├── data/           # 题库数据与网页端账号表
 ├── docs/           # 文档与配置
 ├── pages/          # 小程序页面
 ├── prompts/        # 课程知识点提示
 ├── scripts/        # 工具脚本
 ├── services/       # 核心业务逻辑
-└── types/          # TypeScript 类型定义
+├── types/          # TypeScript 类型定义
+└── web/            # 网页版（Node 服务端 + 静态页面）
 ```
 
 刷题智能体提供在线答题功能，支持多课程题库管理、随机抽题和固定模板试卷练习。试卷模式默认抽取 20 道单选、10 道判断和 10 道填空题；导出功能使用微信剪贴板，复制后可粘贴到文档或聊天中。
@@ -71,6 +136,87 @@ hh-tutor/
 - **答题引擎**：`services/quiz-engine.ts` 提供题目抽取、洗牌、选项随机化等核心功能
 - **页面渲染**：`pages/quiz/` 负责小程序端的题目展示和交互
 - **题型支持**：单选题、判断题、填空题
+
+## 网页版（web/）
+
+网页版把同一套 `data/topic-*.ts` 题库发布到浏览器，**题库权限由账号决定**：已付费课程可选，未付费课程不可选，管理员账号可进入全部题库。
+
+```bash
+node web/server.js            # 默认 http://localhost:3000
+PORT=8080 node web/server.js  # 换端口；HOST 可改绑定地址
+```
+
+零第三方依赖，只用 Node 内置模块。运行期读的是 `web/data` 下的 JSON 构建产物，**不要求高版本 Node**；只有 `scripts/build-web-bundle.cjs` 生成产物时需要 Node ≥ 22.6（它要直接读 TypeScript 题库）。
+
+### 权限模型
+
+- **判定在服务端完成**：`web/lib/auth.cjs` 的 `resolveEntitlements()` 是唯一权限来源。未开通课程的专题接口返回 403，题目根本不会下发到浏览器，前端改 JS 也拿不到。
+- **管理员**：`role` 为 `admin`，自动解锁全部题库，账号上的 `courses` 被忽略。
+- **普通用户**：只能用 `courses` 里登记的课程。
+- **判题也在服务端**：下发的题目不含 `correctAnswer` 与 `explain`，答案留在服务端会话里，`POST /api/quiz/check` 返回对错、正确答案和解析。
+
+### 上传规则（仅管理员可编辑）
+
+学员可在课程页上传作业，服务端按规则校验：
+
+- **允许的格式**：扩展名白名单，默认 `.pdf`、`.docx`
+- **文件名规则**：正则表达式，默认 `^[^_\\/]+_[^_\\/]+_[a-z]{2}\.(?:pdf|docx)$`（学号_姓名_课程代码，如 `2023010101_张三_py.pdf`）
+- **命名说明**：不匹配时提示给学员的文字
+- **大小上限**：单文件 MB 数，上限 200 MB
+
+规则存在 `web/data/upload-rules.json`（首次运行用内置默认值）。**读取所有人都可以，修改只有管理员**：
+
+```text
+GET  /api/settings/upload   # 登录即可读，返回 canEdit 标记
+PUT  /api/settings/upload   # 非管理员返回 403
+POST /api/upload            # { courseId, fileName, contentBase64 }，校验格式/大小/命名
+GET  /api/uploads           # 自己的上传记录；管理员看全部
+```
+
+管理员在网页端「上传规则设置」面板里改，保存后对后续上传立即生效。前端只负责展示，真正的校验始终在服务端——改前端 JS 绕不过。上传文件落在 `web/data/uploads/`，记录在同目录 `index.json`。
+
+文件名还会挡掉 `../` 这类路径穿越写法，落盘时再按时间戳加随机前缀重命名，避免覆盖。
+
+### 账号管理
+
+账号表在 `data/accounts.json`，只存 `pbkdf2` 盐值与哈希，不存明文密码。用 CLI 维护：
+
+```bash
+node scripts/manage-accounts.cjs init                                   # 首次初始化默认账号
+node scripts/manage-accounts.cjs list                                   # 查看账号与已购课程
+node scripts/manage-accounts.cjs add 张三 pwd1234 --courses py,ml        # 新增普通账号
+node scripts/manage-accounts.cjs add kefu pwd1234 --role admin          # 新增管理员
+node scripts/manage-accounts.cjs courses 张三 py,ml,al                  # 调整已购课程
+node scripts/manage-accounts.cjs passwd 张三 newpwd                     # 改密码
+node scripts/manage-accounts.cjs remove 张三                            # 删除
+```
+
+默认账号（**上线前必须改密码**）：`admin / admin2026`（管理员，全部题库）、`demo / demo2026`（仅 `py`）。
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/login` | 登录，下发 HttpOnly 会话 Cookie |
+| POST | `/api/logout` | 退出 |
+| GET | `/api/me` | 当前账号与已解锁课程 |
+| GET | `/api/courses` | 课程列表，含 `unlocked` 标记 |
+| GET | `/api/courses/:id/topics` | 专题列表，未开通返回 403 |
+| POST | `/api/quiz` | 组卷，未开通返回 403 |
+| POST | `/api/quiz/check` | 判题，返回对错、正确答案、解析 |
+| GET/PUT | `/api/settings/upload` | 上传规则；PUT 仅管理员 |
+| POST | `/api/upload` | 上传作业，按规则校验 |
+| GET | `/api/uploads` | 上传记录 |
+
+### 网页端测试
+
+```bash
+node --test scripts/web-api.test.cjs
+```
+
+测试会临时起服务、用临时账号表（通过 `TUTTI_ACCOUNTS_PATH` 指向），不读写真实的 `data/accounts.json`。
+
+> 注意：会话存在进程内存里，重启服务后所有登录态失效。多实例部署需要把会话换成共享存储（Redis 等）。
 
 ## 微信登录授权接口
 

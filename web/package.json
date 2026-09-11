@@ -1,0 +1,13 @@
+{
+  "name": "tutti-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "刷题助手网页版：按账号付费情况开放题库，管理员可进入全部题库",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}

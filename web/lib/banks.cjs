@@ -1,84 +1,53 @@
 const fs = require("fs");
 const path = require("path");
 
-const { loadTopicBank } = require("../../scripts/load-topic-bank.cjs");
-const { loadQuizEngine } = require("../../scripts/load-quiz-engine.cjs");
-const { loadAgentRegistryMeta } = require("../../scripts/load-registry-meta.cjs");
+// 发布沙箱只上传 web/ 目录，因此运行期一律读 web/data 下的构建产物。
+// 在仓库内开发时若还没构建，则退回直接读取 data/topic-*.ts。
+const BUNDLE_DIR = path.join(__dirname, "../data");
+const BUNDLE_MANIFEST = path.join(BUNDLE_DIR, "courses.json");
+const BUNDLE_BANKS_DIR = path.join(BUNDLE_DIR, "banks");
+const REPO_DATA_DIR = path.join(__dirname, "../../data");
 
-const DATA_DIR = path.join(__dirname, "../../data");
+const { buildCatalogFromRepo, summarize } = require("./catalog.cjs");
+
 const TYPES = ["single", "judge", "fill"];
 const ALL_TOPICS = "__all__";
 
-// registry.ts 解析失败时的兜底标题，保证网页端仍能正常展示。
-const FALLBACK_TITLES = {
-  py: "Python 编程",
-  ml: "机器学习概论",
-  al: "数据结构与算法",
-  cv: "图像处理"
-};
+function loadBundledCatalog() {
+  if (!fs.existsSync(BUNDLE_MANIFEST)) return null;
 
-const engine = loadQuizEngine();
-const bankCache = new Map();
+  const courses = JSON.parse(fs.readFileSync(BUNDLE_MANIFEST, "utf8")).courses;
+  if (!Array.isArray(courses) || !courses.length) return null;
 
-function listCourseIds() {
-  return fs
-    .readdirSync(DATA_DIR)
-    .filter(file => /^topic-.*\.ts$/.test(file))
-    .map(file => file.replace(/^topic-/, "").replace(/\.ts$/, ""))
-    .sort();
+  return courses.map(course => Object.assign({}, course, summarize(course.topics)));
 }
 
-function isTopicBank(value) {
-  return Boolean(value && typeof value === "object" && ("single" in value || "judge" in value || "fill" in value));
-}
-
-function getBank(courseId) {
-  if (!bankCache.has(courseId)) {
-    bankCache.set(courseId, loadTopicBank(courseId));
-  }
-  return bankCache.get(courseId);
-}
-
-function buildCatalog() {
-  const registry = loadAgentRegistryMeta();
-
-  return listCourseIds().map(id => {
-    const bank = getBank(id);
-    const nameMap = (bank._config && bank._config.topicNameMap) || {};
-    const registryTopics = new Map((registry[id] && registry[id].topics) || []);
-
-    // 与小程序 buildAgentTopics 口径一致：只取 registry 登记的专题。
-    // 直接用 bank 的键会把 calcQuestions / combined 这类非练习容器也列出来。
-    const declaredKeys = (registry[id] && registry[id].topics.length)
-      ? registry[id].topics.map(([key]) => key)
-      : Object.keys(bank).filter(key => key !== "_config");
-
-    const topics = declaredKeys
-      .filter(key => isTopicBank(bank[key]))
-      .map(key => ({
-        key,
-        name: nameMap[key] || registryTopics.get(key) || key,
-        single: (bank[key].single || []).length,
-        judge: (bank[key].judge || []).length,
-        fill: (bank[key].fill || []).length
-      }))
-      .filter(topic => topic.single + topic.judge + topic.fill > 0);
-
-    return {
-      id,
-      title: (registry[id] && registry[id].title) || FALLBACK_TITLES[id] || id.toUpperCase(),
-      topicCount: topics.length,
-      questionTotal: topics.reduce((total, topic) => total + topic.single + topic.judge + topic.fill, 0),
-      topics
-    };
+function loadRepoCatalog() {
+  return buildCatalogFromRepo().map(entry => {
+    const { bank, ...course } = entry;
+    return Object.assign(course, summarize(course.topics));
   });
 }
 
-const catalog = buildCatalog();
+const catalog = loadBundledCatalog() || loadRepoCatalog();
 const courseMap = new Map(catalog.map(course => [course.id, course]));
+const bankCache = new Map();
 
 function getCourse(courseId) {
   return courseMap.get(courseId) || null;
+}
+
+function getBank(courseId) {
+  if (!getCourse(courseId)) return null;
+  if (bankCache.has(courseId)) return bankCache.get(courseId);
+
+  const bundledPath = path.join(BUNDLE_BANKS_DIR, `${courseId}.json`);
+  const bank = fs.existsSync(bundledPath)
+    ? JSON.parse(fs.readFileSync(bundledPath, "utf8"))
+    : require("../../scripts/load-topic-bank.cjs").loadTopicBank(courseId);
+
+  bankCache.set(courseId, bank);
+  return bank;
 }
 
 function resolveTopicName(courseId, topicKey) {
@@ -86,6 +55,10 @@ function resolveTopicName(courseId, topicKey) {
   if (!course) return topicKey;
   const topic = course.topics.find(item => item.key === topicKey);
   return topic ? topic.name : topicKey;
+}
+
+function getEngine() {
+  return require("./engine.cjs");
 }
 
 function collectPool(courseId, topicKey, types) {
@@ -105,7 +78,7 @@ function collectPool(courseId, topicKey, types) {
   return pool;
 }
 
-// 生成一次练习：服务端保留正确答案与解析，只把题干/选项下发给浏览器。
+// 生成一次练习：正确答案与解析只保留在服务端会话里，不随题目下发。
 function createQuiz(courseId, topicKey, count, types) {
   const course = getCourse(courseId);
   if (!course) return null;
@@ -114,6 +87,7 @@ function createQuiz(courseId, topicKey, count, types) {
   const pool = collectPool(courseId, topicKey, useTypes);
   if (!pool.length) return null;
 
+  const engine = getEngine();
   const picked = engine.pickRandomMany(pool, Math.max(1, Math.min(count, pool.length)));
 
   const items = picked.map(entry => {
@@ -156,7 +130,7 @@ function normalizeText(value) {
   return String(value || "").trim().replace(/\s+/g, "").toLowerCase();
 }
 
-// 判题在服务端完成：填空题比对文本，单选/判断比对选项值。
+// 判题在服务端完成：填空比对文本，单选/判断比对选项值。
 function gradeAnswer(item, submitted) {
   if (item.type === "fill") {
     const expected = (item.options[0] && item.options[0].text) || "";
