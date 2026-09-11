@@ -13,8 +13,6 @@ import {
 } from "../../services/user-db";
 import {
   AnswerValue,
-  ChoiceQuestion,
-  QuestionOption,
   QuestionType,
   QuizBank,
   QuizQuestion,
@@ -25,8 +23,7 @@ import {
   buildAgentTopics,
   getAgentBank,
   getAgentCourse,
-  getAvailableAgentIds,
-  isTopicBank
+  getAvailableAgentIds
 } from "../../services/registry";
 import {
   formatExplain,
@@ -82,10 +79,12 @@ interface QuizPageInstance {
   topicDone: Record<string, number>;
   userProfile: UserProfile | null;
   wechatOpenId: string;
+  requestedKind: string;
   examQuestions: QuizQuestion[];
   examIndex: number;
   refreshDeviceInfo(): void;
   goHome(): void;
+  switchCourse(): void;
   loadPurchasedAgent(): Promise<void>;
   loadCourse(kind: AgentKind, profile?: UserProfile | null): void;
   switchTopic(event: MiniProgramTapEvent<{ topic?: string }>): void;
@@ -149,11 +148,13 @@ Page<QuizData, QuizPageInstance>({
   topicDone: {},
   userProfile: null,
   wechatOpenId: "",
+  requestedKind: "",
   examQuestions: [],
   examIndex: 0,
 
-  onLoad() {
+  onLoad(options: Record<string, string | undefined>) {
     this.refreshDeviceInfo();
+    this.requestedKind = (options && options.kind) || "";
     this.loadPurchasedAgent();
   },
 
@@ -172,6 +173,13 @@ Page<QuizData, QuizPageInstance>({
       url: "/pages/index/index"
     });
   },
+
+  switchCourse() {
+    wx.redirectTo({
+      url: "/pages/index/index"
+    });
+  },
+
   async loadPurchasedAgent() {
     const session = await resolveUserSession(getAvailableAgentIds());
     if (!session) {
@@ -185,14 +193,25 @@ Page<QuizData, QuizPageInstance>({
     this.wechatOpenId = session.wechatOpenId;
     try {
       this.userProfile = await getOrCreateUserProfile(session.wechatOpenId, session.agents);
-    } catch (error) {
+    } catch {
       this.userProfile = null;
       wx.showToast({
         title: "用户数据加载失败，已降级本地使用",
         icon: "none"
       });
     }
-    this.loadCourse(session.agent, this.userProfile);
+    // 课程由 URL 参数指定；必须校验授权，避免直接改参数进入未付费题库。
+    const kind = this.requestedKind || session.agent;
+    if (session.agents[kind] !== true) {
+      const course = getAgentCourse(kind);
+      this.setData({
+        isReady: false,
+        readyMessage: `「${course ? course.title : kind}」尚未开通，请返回课程列表选择已开通的题库。`
+      });
+      return;
+    }
+
+    this.loadCourse(kind, this.userProfile);
   },
 
   loadCourse(kind: AgentKind, profile?: UserProfile | null) {
@@ -254,9 +273,9 @@ Page<QuizData, QuizPageInstance>({
     this.setData({
       currentTopic,
       currentQuestion: null,
-    showErrorBook: false,
-    examMode: false,
-    examProgressText: ""
+      showErrorBook: false,
+      examMode: false,
+      examProgressText: ""
     });
     this.updateComputedViewState();
   },

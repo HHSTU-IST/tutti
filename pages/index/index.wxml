@@ -9,7 +9,7 @@
     </view>
 
     <view class="hero-title">专注练习、错题回看、进度追踪</view>
-    <view class="hero-copy">题库权限由后台根据购买情况分配，当前页面不提供手动切换入口。</view>
+    <view class="hero-copy">全部课程题库已内置在本小程序，登录后按购买情况逐科开放。</view>
 
     <button
       class="login-btn"
@@ -44,13 +44,22 @@
       </view>
     </view>
 
-    <button
-      wx:if="{{canEnter}}"
-      class="enter-btn"
-      bindtap="enterQuiz"
-    >
-      进入刷题
-    </button>
+    <view wx:if="{{courseList.length}}" class="course-section">
+      <view class="section-title">课程题库</view>
+      <view
+        wx:for="{{courseList}}"
+        wx:key="id"
+        class="{{item.cardClass}}"
+        data-kind="{{item.id}}"
+        bindtap="enterCourse"
+      >
+        <view class="course-main">
+          <view class="course-name">{{item.title}}</view>
+          <view class="course-meta">{{item.topicCount}} 个专题 · {{item.questionTotal}} 道题</view>
+        </view>
+        <view class="course-action">{{item.actionText}}</view>
+      </view>
+    </view>
   </view>
 
   <view class="feature-grid">

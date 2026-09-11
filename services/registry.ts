@@ -11,6 +11,13 @@ export interface AgentDefinition extends CourseInfo {
   bank: QuizBank;
 }
 
+export interface CourseOption {
+  id: AgentKind;
+  title: string;
+  topicCount: number;
+  questionTotal: number;
+}
+
 export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
   py: {
     id: "py",
@@ -121,4 +128,22 @@ export function buildAgentTopics(kind: AgentKind): TopicItem[] {
         buttonClass: "topic-btn"
       };
     });
+}
+
+// 课程清单用于首页展示：全部题库都内置在同一个小程序里，是否可进入由后台授权决定。
+export function listAgentCourses(): CourseOption[] {
+  return Object.keys(AGENT_REGISTRY).map(id => {
+    const agent = AGENT_REGISTRY[id];
+    const topics = agent.fallbackTopics.filter(([key]) => isTopicBank(agent.bank[key]));
+
+    return {
+      id,
+      title: agent.title,
+      topicCount: topics.length,
+      questionTotal: topics.reduce((total, [key]) => {
+        const topic = agent.bank[key] as TopicBank;
+        return total + (topic.single || []).length + (topic.judge || []).length + (topic.fill || []).length;
+      }, 0)
+    };
+  });
 }

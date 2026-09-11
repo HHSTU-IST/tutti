@@ -5,7 +5,10 @@
         <view class="course-title">{{title}}</view>
         <view class="muted">当前专题：{{currentTopicName}}</view>
       </view>
-      <button class="danger-btn reset-btn" bindtap="resetStats">重置</button>
+      <view class="summary-actions">
+        <button class="switch-btn" bindtap="switchCourse">切换课程</button>
+        <button class="danger-btn reset-btn" bindtap="resetStats">重置</button>
+      </view>
     </view>
 
     <view class="stats-grid">

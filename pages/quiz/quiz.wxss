@@ -21,6 +21,21 @@
   font-weight: 800;
 }
 
+.summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  flex-shrink: 0;
+}
+
+.switch-btn {
+  min-width: 148rpx;
+  padding: 12rpx 18rpx;
+  background: #eef4ff;
+  color: #1f6feb;
+  font-weight: 700;
+}
+
 .reset-btn {
   min-width: 128rpx;
   padding: 12rpx 18rpx;

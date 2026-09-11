@@ -24,7 +24,7 @@ function resolveRuntimeConfig(): RuntimeConfig {
     if (envVersion === "release" || envVersion === "trial") {
       return PRODUCTION_RUNTIME_CONFIG;
     }
-  } catch (error) {
+  } catch {
     // Fall back to development profile when account info is unavailable.
   }
 

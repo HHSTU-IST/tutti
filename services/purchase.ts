@@ -46,6 +46,11 @@ export function resolveUserSession(availableAgents?: AgentKind[]): Promise<UserS
     .catch(() => getCachedSession(availableAgents));
 }
 
+// 只读取本地缓存会话，供首页 onLoad 恢复已登录状态，不触发 wx.login。
+export function restoreUserSession(availableAgents?: AgentKind[]): UserSession | null {
+  return getCachedSession(availableAgents);
+}
+
 function loginWithWechat(): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.login({
@@ -109,7 +114,7 @@ function finalizeSession(session: Omit<UserSession, "agent">, availableAgents?: 
 function cacheSession(session: UserSession): void {
   try {
     wx.setStorageSync(LAST_USER_SESSION_STORAGE_KEY, session);
-  } catch (error) {
+  } catch {
     // Storage is best-effort; login should still succeed without it.
   }
 }
@@ -123,7 +128,7 @@ function getCachedSession(availableAgents?: AgentKind[]): UserSession | null {
     return agent
       ? { agent, agents: stored.agents, wechatOpenId: stored.wechatOpenId }
       : null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -144,7 +149,7 @@ function getLocalTestOpenId(code: string): string {
     const openId = `${LOCAL_TEST_OPEN_ID_PREFIX}${suffix}`;
     wx.setStorageSync(LOCAL_TEST_OPEN_ID_STORAGE_KEY, openId);
     return openId;
-  } catch (error) {
+  } catch {
     return `${LOCAL_TEST_OPEN_ID_PREFIX}${Date.now()}`;
   }
 }
