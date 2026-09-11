@@ -16,9 +16,11 @@ function withMocks(testFn) {
     const orig = { write: fs.writeFileSync, spawn: childProcess.spawnSync, log: console.log };
 
     fs.writeFileSync = (filePath, content) => writes.push({ filePath, content });
-    childProcess.spawnSync = (command, args) => {
-      spawns.push({ command, args });
-      return { status: 0, stdout: "", stderr: "" };
+    childProcess.spawnSync = (command, args, options) => {
+      spawns.push({ command, args, input: options && options.input });
+      // rumdl fmt - 从 stdin 读取正文并把格式化结果输出到 stdout，这里回显输入以模拟真实行为。
+      const echoed = options && typeof options.input === "string" ? options.input : "";
+      return { status: 0, stdout: echoed, stderr: "" };
     };
     console.log = (value) => logs.push(value);
 
@@ -55,7 +57,7 @@ test("generate-exam-ml exports testable paper generation helpers", withMocks(({ 
   assert.doesNotMatch(paper, /\{\{[a-zA-Z]+\}\}/);
   assert.match(answer, /参考答案/);
   assert.equal(manifestEntry.version, "A");
-  assert.equal(manifestEntry.courseCode, "xm");
+  assert.equal(manifestEntry.courseCode, "ml");
   assert.equal(manifestEntry.outPaper, "/tmp/ml-2025-2-A.md");
   assert.deepEqual(manifestEntry.counts, counts);
 
@@ -63,7 +65,7 @@ test("generate-exam-ml exports testable paper generation helpers", withMocks(({ 
 
   const versionArtifacts = examModule.buildVersionArtifacts({ spec, version: "A" });
   assert.equal(versionArtifacts.manifestEntry.version, "A");
-  assert.equal(versionArtifacts.manifestEntry.courseCode, "xm");
+  assert.equal(versionArtifacts.manifestEntry.courseCode, "ml");
   assert.match(versionArtifacts.paper, /机器学习概论/);
   assert.match(versionArtifacts.answer, /参考答案/);
 }));
@@ -89,14 +91,27 @@ test("publishGeneratedArtifacts writes files, logs paths, and triggers docx expo
   const result = examModule.publishGeneratedArtifacts({ manifestEntry, paper: "paper body", answer: "answer body" });
 
   assert.equal(result, manifestEntry);
+
+  // 每个产物只写一次：排版在内存中完成后落盘，不存在「先写原文再写格式化结果」的重复写。
   assert.deepEqual(writes, [
     { filePath: "/tmp/ml-2025-2-A.md", content: "paper body" },
     { filePath: "/tmp/ml-2025-2-Ak.md", content: "answer body" },
   ]);
+  const writtenPaths = writes.map((w) => w.filePath);
+  assert.equal(new Set(writtenPaths).size, writtenPaths.length, "同一个文件不应被写入多次");
+
   assert.deepEqual(logs, ["/tmp/ml-2025-2-A.md", "/tmp/ml-2025-2-Ak.md"]);
-  assert.equal(spawns.length, 1);
-  assert.equal(spawns[0].command, "python3");
-  assert.deepEqual(spawns[0].args.slice(-2), [
+
+  // 2 次 rumdl（正文 + 答案）+ 1 次 python3（docx 导出）
+  assert.equal(spawns.length, 3);
+  const rumdlSpawns = spawns.filter((s) => s.command === "rumdl");
+  assert.equal(rumdlSpawns.length, 2);
+  assert.deepEqual(rumdlSpawns.map((s) => s.args), [["format", "-"], ["format", "-"]]);
+  assert.deepEqual(rumdlSpawns.map((s) => s.input), ["paper body", "answer body"]);
+
+  const docxSpawn = spawns.find((s) => s.command === "python3");
+  assert.ok(docxSpawn, "应触发 docx 导出");
+  assert.deepEqual(docxSpawn.args.slice(-2), [
     path.join(__dirname, "generate-exam-docx.py"),
     "/tmp/ml-2025-2-A.md",
   ]);
@@ -125,7 +140,7 @@ test("runCli returns a manifest for both generated paper versions", withMocks(({
   assert.equal(typeof m.paperBytes, "number");
   assert.equal(typeof m.answerBytes, "number");
   assert.deepEqual(m.counts, { single: 20, judge: 10, fill: 10, calc: 2, essay: 3 });
-  assert.equal(m.courseCode, "xm");
+  assert.equal(m.courseCode, "ml");
   assert.equal(m.courseName, "机器学习概论");
   assert.equal(m.paperCode, "010822405");
   assert.equal(m.academicYear, "2025-2026");
@@ -137,8 +152,11 @@ test("runCli returns a manifest for both generated paper versions", withMocks(({
   assert.ok(m.answerLength > 0);
   assert.ok(m.paperBytes >= m.paperLength);
   assert.ok(m.answerBytes >= m.answerLength);
+  // 2 个版本 x (正文 + 答案) = 4 次写；每次写对应 1 次 rumdl，外加每个版本 1 次 docx 导出。
   assert.equal(writes.length, 4);
-  assert.equal(spawns.length, 2);
+  assert.equal(new Set(writes.map((w) => w.filePath)).size, 4, "每个版本的文件只写一次");
+  assert.equal(spawns.filter((s) => s.command === "rumdl").length, 4);
+  assert.equal(spawns.filter((s) => s.command === "python3").length, 2);
   assert.equal(logs.length, 4);
 }));
 
@@ -150,5 +168,5 @@ test("runCli can generate a selected version list", withMocks(({ examModule, wri
   assert.equal(path.basename(manifest[0].outPaper), "ml-2025-2-B.md");
   assert.equal(path.basename(manifest[0].outAnswer), "ml-2025-2-Bk.md");
   assert.equal(writes.length, 2);
-  assert.equal(spawns.length, 1);
+  assert.equal(spawns.length, 3);
 }));

@@ -171,9 +171,13 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     return result.join("\n");
   }
 
-  function formatMarkdown(mdPath) {
+  // rumdl 支持 "-" 从 stdin 读取：格式化后的正文输出到 stdout，诊断信息输出到 stderr。
+  // 因此排版可以完全在内存中完成，每个产物只落盘一次（原实现是「写原文 -> rumdl 就地改 -> 读回 -> 再写」，
+  // 同一文件被写两次，且第二次写覆盖第一次）。
+  function formatMarkdownText(text, label) {
     const rumdlBin = process.env.RUMDL || "rumdl";
-    const result = childProcess.spawnSync(rumdlBin, ["format", mdPath], {
+    const result = childProcess.spawnSync(rumdlBin, ["format", "-"], {
+      input: text,
       encoding: "utf8",
       stdio: "pipe"
     });
@@ -181,15 +185,25 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     if (result.error || result.status !== 0) {
       const stderr = (result.stderr || "").trim();
       const stdout = (result.stdout || "").trim();
-      throw new Error(`Markdown格式化失败：${mdPath}\n${stderr || stdout || result.error?.message || "unknown error"}`);
+      throw new Error(`Markdown格式化失败：${label}\n${stderr || stdout || result.error?.message || "unknown error"}`);
+    }
+
+    const formatted = typeof result.stdout === "string" ? result.stdout : "";
+    if (!formatted.trim()) {
+      throw new Error(`Markdown格式化未返回内容：${label}。请确认 rumdl 版本支持 \`rumdl fmt -\` 读取标准输入。`);
     }
 
     // Apply LaTeX blank-line spacing after rumdl so it survives formatting.
-    const formatted = fs.readFileSync(mdPath, "utf8");
-    fs.writeFileSync(mdPath, ensureLatexBlankLines(formatted));
+    const spaced = ensureLatexBlankLines(formatted);
 
-    const output = (result.stdout || "").trim();
-    if (output) console.log(output);
+    const diagnostics = (result.stderr || "").trim();
+    if (diagnostics) console.log(diagnostics);
+
+    return spaced;
+  }
+
+  function writeFormattedMarkdown(mdPath, content) {
+    fs.writeFileSync(mdPath, formatMarkdownText(content, mdPath));
   }
 
   function generateDocx(mdPath) {
@@ -349,10 +363,8 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
   }
 
   function publishGeneratedArtifacts({ manifestEntry, paper, answer }) {
-    fs.writeFileSync(manifestEntry.outPaper, paper);
-    fs.writeFileSync(manifestEntry.outAnswer, answer);
-    formatMarkdown(manifestEntry.outPaper);
-    formatMarkdown(manifestEntry.outAnswer);
+    writeFormattedMarkdown(manifestEntry.outPaper, paper);
+    writeFormattedMarkdown(manifestEntry.outAnswer, answer);
     console.log(manifestEntry.outPaper);
     console.log(manifestEntry.outAnswer);
     generateDocx(manifestEntry.outPaper);
@@ -385,6 +397,7 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     buildManifestEntry,
     buildVersionArtifacts,
     fillTemplate,
+    formatMarkdownText,
     loadExamSpec,
     makePaper,
     makePaperFileName,

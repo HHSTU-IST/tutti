@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>刷题助手 · 网页版</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">刷题助手</div>
+        <div class="user-area">
+          <span id="user-tag" class="tag" hidden></span>
+          <button id="logout-btn" class="link-btn" hidden>退出</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="login-view" class="card login-card">
+        <h1>登录</h1>
+        <p class="muted">题库权限由账号决定：已购课程可选，管理员可进入全部题库。</p>
+        <form id="login-form" autocomplete="off">
+          <label for="username">用户名</label>
+          <input id="username" name="username" type="text" required autofocus />
+          <label for="password">密码</label>
+          <input id="password" name="password" type="password" required />
+          <button type="submit" class="primary-btn">登录</button>
+          <p id="login-error" class="error" hidden></p>
+        </form>
+      </section>
+
+      <section id="courses-view" hidden>
+        <div class="view-head">
+          <h1>选择题库</h1>
+          <p class="muted" id="courses-hint"></p>
+        </div>
+        <div id="course-grid" class="grid"></div>
+      </section>
+
+      <section id="topics-view" hidden>
+        <div class="view-head">
+          <button id="back-to-courses" class="link-btn">← 返回题库</button>
+          <h1 id="topics-title"></h1>
+        </div>
+        <div class="setup-row">
+          <span class="muted">题量</span>
+          <span id="count-chips" class="chip-group"></span>
+          <span class="muted">题型</span>
+          <span id="type-chips" class="chip-group"></span>
+        </div>
+        <div id="topic-list" class="grid"></div>
+      </section>
+
+      <section id="quiz-view" hidden>
+        <div class="view-head">
+          <button id="back-to-topics" class="link-btn">← 返回专题</button>
+          <div class="progress-wrap">
+            <div class="progress-bar"><div id="progress-fill"></div></div>
+            <span id="progress-text" class="muted"></span>
+          </div>
+        </div>
+
+        <div id="question-card" class="card">
+          <div class="question-meta">
+            <span id="q-type" class="tag"></span>
+            <span id="q-topic" class="tag tag-soft"></span>
+          </div>
+          <p id="q-text" class="question-text"></p>
+          <div id="q-options" class="options"></div>
+          <div id="q-fill" class="fill-area" hidden>
+            <input id="fill-input" type="text" placeholder="请输入答案" />
+            <button id="fill-submit" class="primary-btn">提交</button>
+          </div>
+          <div id="q-result" class="result" hidden></div>
+          <div class="actions">
+            <button id="next-btn" class="primary-btn" hidden>下一题</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="summary-view" class="card" hidden>
+        <h1>练习完成</h1>
+        <p id="summary-text" class="summary-score"></p>
+        <div class="actions">
+          <button id="retry-btn" class="primary-btn">再练一次</button>
+          <button id="finish-btn" class="ghost-btn">返回专题</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
