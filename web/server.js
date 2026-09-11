@@ -1,0 +1,272 @@
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+
+const banks = require("./lib/banks.cjs");
+const auth = require("./lib/auth.cjs");
+
+const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || "0.0.0.0";
+const PUBLIC_DIR = path.join(__dirname, "public");
+const MAX_BODY_BYTES = 1024 * 1024;
+
+const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon"
+};
+
+function sendJson(res, status, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-store"
+  });
+  res.end(body);
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", chunk => {
+      raw += chunk;
+      if (raw.length > MAX_BODY_BYTES) {
+        reject(new Error("请求体过大"));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      if (!raw) return resolve({});
+      try {
+        resolve(JSON.parse(raw));
+      } catch (error) {
+        reject(new Error("请求体不是合法 JSON"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function currentSession(req) {
+  const cookies = auth.parseCookies(req.headers.cookie);
+  return auth.getSession(cookies[auth.SESSION_COOKIE]);
+}
+
+function requireSession(req, res) {
+  const session = currentSession(req);
+  if (!session) {
+    sendJson(res, 401, { error: "未登录或登录已过期" });
+    return null;
+  }
+  return session;
+}
+
+// 付费判定始终在服务端完成：未开通课程直接 403，题目根本不会下发到浏览器。
+function canAccess(session, courseId) {
+  return session.isAdmin || session.unlocked.includes(courseId);
+}
+
+function handleLogin(req, res, body) {
+  const username = String(body.username || "").trim();
+  const user = auth.findUser(username);
+
+  if (!user || !auth.verifyPassword(user, String(body.password || ""))) {
+    return sendJson(res, 401, { error: "用户名或密码错误" });
+  }
+
+  const token = auth.createSession(user);
+  const session = auth.getSession(token);
+  res.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Set-Cookie": auth.sessionCookie(token, Math.floor(auth.SESSION_TTL_MS / 1000)),
+    "Cache-Control": "no-store"
+  });
+  return res.end(JSON.stringify({ ok: true, user: session }));
+}
+
+function handleLogout(req, res) {
+  const cookies = auth.parseCookies(req.headers.cookie);
+  auth.destroySession(cookies[auth.SESSION_COOKIE]);
+  res.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Set-Cookie": auth.expiredCookie()
+  });
+  return res.end(JSON.stringify({ ok: true }));
+}
+
+function handleCourses(session) {
+  return banks.catalog.map(course => ({
+    id: course.id,
+    title: course.title,
+    topicCount: course.topicCount,
+    questionTotal: course.questionTotal,
+    unlocked: canAccess(session, course.id)
+  }));
+}
+
+function handleTopics(session, courseId) {
+  if (!canAccess(session, courseId)) return { status: 403, payload: { error: "该课程尚未开通" } };
+
+  const course = banks.getCourse(courseId);
+  if (!course) return { status: 404, payload: { error: "课程不存在" } };
+
+  return {
+    status: 200,
+    payload: {
+      id: course.id,
+      title: course.title,
+      topics: [{ key: banks.ALL_TOPICS, name: "全部专题（混合）", ...sumCounts(course.topics) }].concat(course.topics)
+    }
+  };
+}
+
+function sumCounts(topics) {
+  return topics.reduce(
+    (acc, topic) => ({
+      single: acc.single + topic.single,
+      judge: acc.judge + topic.judge,
+      fill: acc.fill + topic.fill
+    }),
+    { single: 0, judge: 0, fill: 0 }
+  );
+}
+
+function handleQuiz(session, body) {
+  const courseId = String(body.courseId || "");
+  if (!canAccess(session, courseId)) return { status: 403, payload: { error: "该课程尚未开通" } };
+
+  const course = banks.getCourse(courseId);
+  if (!course) return { status: 404, payload: { error: "课程不存在" } };
+
+  const topicKey = String(body.topicKey || banks.ALL_TOPICS);
+  const count = Math.max(1, Math.min(100, Number(body.count) || 10));
+  const types = Array.isArray(body.types) && body.types.length ? body.types : banks.TYPES;
+
+  const quiz = banks.createQuiz(courseId, topicKey, count, types);
+  if (!quiz || !quiz.items.length) return { status: 400, payload: { error: "该专题暂无可用题目" } };
+
+  // 正确答案与解析只留在服务端会话里，浏览器拿到的是不含答案的题目。
+  session.quiz = quiz;
+
+  return {
+    status: 200,
+    payload: {
+      courseId,
+      courseTitle: course.title,
+      topicKey,
+      total: quiz.items.length,
+      questions: quiz.items.map(banks.toClientQuestion)
+    }
+  };
+}
+
+function handleCheck(session, body) {
+  const quiz = session.quiz;
+  if (!quiz) return { status: 400, payload: { error: "当前没有进行中的练习" } };
+
+  const index = Number(body.index);
+  const item = quiz.items[index];
+  if (!item) return { status: 400, payload: { error: "题目序号无效" } };
+
+  const result = banks.gradeAnswer(item, body.value);
+
+  return {
+    status: 200,
+    payload: {
+      index,
+      correct: result.correct,
+      correctText: result.correctText,
+      correctValue: result.correctValue,
+      explain: item.explain || "暂无解析"
+    }
+  };
+}
+
+async function handleApi(req, res, pathname, body) {
+  if (pathname === "/api/login" && req.method === "POST") {
+    return handleLogin(req, res, body);
+  }
+
+  if (pathname === "/api/logout" && req.method === "POST") {
+    return handleLogout(req, res);
+  }
+
+  const session = requireSession(req, res);
+  if (!session) return undefined;
+
+  if (pathname === "/api/me") {
+    return sendJson(res, 200, {
+      username: session.username,
+      role: session.role,
+      isAdmin: session.isAdmin,
+      unlocked: session.unlocked
+    });
+  }
+
+  if (pathname === "/api/courses") {
+    return sendJson(res, 200, { courses: handleCourses(session) });
+  }
+
+  const topicsMatch = /^\/api\/courses\/([\w-]+)\/topics$/.exec(pathname);
+  if (topicsMatch) {
+    const result = handleTopics(session, topicsMatch[1]);
+    return sendJson(res, result.status, result.payload);
+  }
+
+  if (pathname === "/api/quiz" && req.method === "POST") {
+    const result = handleQuiz(session, body);
+    return sendJson(res, result.status, result.payload);
+  }
+
+  if (pathname === "/api/quiz/check" && req.method === "POST") {
+    const result = handleCheck(session, body);
+    return sendJson(res, result.status, result.payload);
+  }
+
+  return sendJson(res, 404, { error: "接口不存在" });
+}
+
+function serveStatic(req, res, pathname) {
+  const relative = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
+  const filePath = path.join(PUBLIC_DIR, relative);
+
+  if (!filePath.startsWith(PUBLIC_DIR)) {
+    res.writeHead(403);
+    return res.end("Forbidden");
+  }
+
+  fs.readFile(filePath, (error, content) => {
+    if (error) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end("Not Found");
+    }
+
+    res.writeHead(200, {
+      "Content-Type": MIME_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream",
+      "Content-Length": content.length
+    });
+    res.end(content);
+  });
+}
+
+const server = http.createServer((req, res) => {
+  const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+  if (pathname.startsWith("/api/")) {
+    readJsonBody(req)
+      .then(body => handleApi(req, res, pathname, body))
+      .catch(error => sendJson(res, 400, { error: error.message }));
+    return;
+  }
+
+  return serveStatic(req, res, pathname);
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`刷题助手网页版已启动: http://localhost:${PORT}`);
+  console.log(`课程: ${banks.catalog.map(course => `${course.id}(${course.questionTotal})`).join("  ")}`);
+});
