@@ -37,6 +37,23 @@
           <p class="muted" id="courses-hint"></p>
         </div>
         <div id="course-grid" class="grid"></div>
+
+        <section id="rules-panel" class="card rules-panel" hidden>
+          <h2>上传规则设置<span class="tag tag-admin">仅管理员</span></h2>
+          <p class="muted">这些设置决定学员能上传什么格式、文件名必须长什么样。只有管理员能修改。</p>
+          <form id="rules-form">
+            <label for="rule-ext">允许的格式（英文逗号分隔）</label>
+            <input id="rule-ext" type="text" placeholder=".pdf,.docx" />
+            <label for="rule-pattern">文件名规则（正则表达式）</label>
+            <input id="rule-pattern" type="text" placeholder="^[^_\\/]+_[^_\\/]+_[a-z]{2}\.(?:pdf|docx)$" />
+            <label for="rule-hint">命名说明（不匹配时提示给学员）</label>
+            <input id="rule-hint" type="text" placeholder="学号_姓名_课程代码，例如 2023010101_张三_py.pdf" />
+            <label for="rule-size">单个文件大小上限（MB）</label>
+            <input id="rule-size" type="text" placeholder="10" />
+            <button type="submit" class="primary-btn">保存规则</button>
+            <p id="rules-msg" class="error" hidden></p>
+          </form>
+        </section>
       </section>
 
       <section id="topics-view" hidden>
@@ -51,6 +68,17 @@
           <span id="type-chips" class="chip-group"></span>
         </div>
         <div id="topic-list" class="grid"></div>
+
+        <section class="card upload-panel">
+          <h2>作业上传</h2>
+          <p class="muted" id="upload-rules"></p>
+          <div class="fill-area">
+            <input id="upload-input" type="file" />
+            <button id="upload-btn" class="primary-btn">上传</button>
+          </div>
+          <p id="upload-msg" class="error" hidden></p>
+          <ul id="upload-list" class="upload-list"></ul>
+        </section>
       </section>
 
       <section id="quiz-view" hidden>

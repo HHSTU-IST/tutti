@@ -4,11 +4,14 @@ const path = require("path");
 
 const banks = require("./lib/banks.cjs");
 const auth = require("./lib/auth.cjs");
+const uploadRules = require("./lib/upload-rules.cjs");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const MAX_BODY_BYTES = 1024 * 1024;
+// 上传走 base64，体积会膨胀约 1/3，单独放宽上限。
+const UPLOAD_BODY_LIMIT = 25 * 1024 * 1024;
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -29,12 +32,12 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, limitBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     let raw = "";
     req.on("data", chunk => {
       raw += chunk;
-      if (raw.length > MAX_BODY_BYTES) {
+      if (raw.length > limitBytes) {
         reject(new Error("请求体过大"));
         req.destroy();
       }
@@ -186,6 +189,48 @@ function handleCheck(session, body) {
   };
 }
 
+// 上传规则所有人可读，但只有管理员能改。
+function handleReadUploadRules(session) {
+  return {
+    rules: uploadRules.describeRules(uploadRules.readRules()),
+    canEdit: Boolean(session.isAdmin)
+  };
+}
+
+function handleUpdateUploadRules(session, body) {
+  if (!session.isAdmin) return { status: 403, payload: { error: "仅管理员可修改上传规则" } };
+
+  try {
+    return { status: 200, payload: { rules: uploadRules.describeRules(uploadRules.writeRules(body)) } };
+  } catch (error) {
+    return { status: 400, payload: { error: error.message } };
+  }
+}
+
+function handleUpload(session, body) {
+  const courseId = String(body.courseId || "");
+  if (!canAccess(session, courseId)) return { status: 403, payload: { error: "该课程尚未开通" } };
+
+  if (typeof body.contentBase64 !== "string" || !body.contentBase64) {
+    return { status: 400, payload: { error: "缺少文件内容" } };
+  }
+
+  const content = Buffer.from(body.contentBase64, "base64");
+
+  try {
+    const record = uploadRules.saveUpload({
+      courseId,
+      username: session.username,
+      fileName: String(body.fileName || ""),
+      sizeBytes: content.length,
+      content
+    });
+    return { status: 200, payload: { ok: true, upload: record } };
+  } catch (error) {
+    return { status: error.status || 400, payload: { error: error.message } };
+  }
+}
+
 async function handleApi(req, res, pathname, body) {
   if (pathname === "/api/login" && req.method === "POST") {
     return handleLogin(req, res, body);
@@ -215,6 +260,25 @@ async function handleApi(req, res, pathname, body) {
   if (topicsMatch) {
     const result = handleTopics(session, topicsMatch[1]);
     return sendJson(res, result.status, result.payload);
+  }
+
+  if (pathname === "/api/settings/upload") {
+    if (req.method === "PUT") {
+      const result = handleUpdateUploadRules(session, body);
+      return sendJson(res, result.status, result.payload);
+    }
+    return sendJson(res, 200, handleReadUploadRules(session));
+  }
+
+  if (pathname === "/api/upload" && req.method === "POST") {
+    const result = handleUpload(session, body);
+    return sendJson(res, result.status, result.payload);
+  }
+
+  if (pathname === "/api/uploads") {
+    return sendJson(res, 200, {
+      uploads: uploadRules.listUploads({ username: session.username, isAdmin: session.isAdmin })
+    });
   }
 
   if (pathname === "/api/quiz" && req.method === "POST") {
@@ -257,7 +321,7 @@ const server = http.createServer((req, res) => {
   const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
   if (pathname.startsWith("/api/")) {
-    readJsonBody(req)
+    readJsonBody(req, pathname === "/api/upload" ? UPLOAD_BODY_LIMIT : MAX_BODY_BYTES)
       .then(body => handleApi(req, res, pathname, body))
       .catch(error => sendJson(res, 400, { error: error.message }));
     return;
@@ -266,7 +330,17 @@ const server = http.createServer((req, res) => {
   return serveStatic(req, res, pathname);
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`刷题助手网页版已启动: http://localhost:${PORT}`);
-  console.log(`课程: ${banks.catalog.map(course => `${course.id}(${course.questionTotal})`).join("  ")}`);
-});
+function startServer(options = {}) {
+  return new Promise(resolve => {
+    const listener = server.listen(options.port || PORT, options.host || HOST, () => resolve(listener));
+  });
+}
+
+if (require.main === module) {
+  startServer().then(listener => {
+    console.log(`刷题助手网页版已启动: http://localhost:${listener.address().port}`);
+    console.log(`课程: ${banks.catalog.map(course => `${course.id}(${course.questionTotal})`).join("  ")}`);
+  });
+}
+
+module.exports = { startServer };

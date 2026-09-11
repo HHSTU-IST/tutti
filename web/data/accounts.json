@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "users": [
+    {
+      "username": "admin",
+      "role": "admin",
+      "courses": [],
+      "salt": "d573723a7df60107c3ec8630dfe1baf9",
+      "hash": "d0ff57857f6a3de6ceb754c385ce39e8bbf9a313913c2dc3160ba0e9ff62e459",
+      "createdAt": "2026-09-11T09:00:08.315Z"
+    },
+    {
+      "username": "demo",
+      "role": "user",
+      "courses": [
+        "py"
+      ],
+      "salt": "f0898a6ed34d64677584e99d3e035b13",
+      "hash": "87d92113fecbcb8082f3b6afd16eefdb3141baac7dcef2277b4a4579fbece1e6",
+      "createdAt": "2026-09-11T09:00:08.331Z"
+    }
+  ]
+}
