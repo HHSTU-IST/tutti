@@ -1,6 +1,6 @@
 const data: import("../types/quiz-bank").QuizBank = {
     "_config": {
-        "title": "数据结构与算法刷题助手",
+        "title": "数据结构与算法课程",
         "topicOrder": [
             "complex",
             "array",

@@ -70,6 +70,7 @@ interface QuizData {
   errorList: ErrorItem[];
   hasNoErrors: boolean;
   showErrorBook: boolean;
+  showTopicPicker: boolean;
   examMode: boolean;
   examProgressText: string;
 }
@@ -90,10 +91,13 @@ interface QuizPageInstance {
   resetStats(): void;
   showErrors(): void;
   makeQuestionByMode(event: MiniProgramTapEvent<{ mode?: string }>): void;
+  showPendingMode(): void;
   startExam(): void;
   nextExamQuestion(): void;
   exportPaper(): void;
+  buildErrorBookMarkdown(): string;
   exportErrors(): void;
+  copyErrorBook(markdown: string): void;
   getQuestions(topicKey: string, type: QuestionType): RawQuestion[];
   getAllQuestions(type: QuestionType): RawQuestion[];
   makeQuestion(type: QuestionType, questions: RawQuestion[]): void;
@@ -116,8 +120,25 @@ function formatRateText(rightNum: number, totalNum: number): string {
   return totalNum ? `${((rightNum / totalNum) * 100).toFixed(1)}%` : "0%";
 }
 
+function pad2(value: number): string {
+  return value < 10 ? `0${value}` : String(value);
+}
+
+function formatExportTime(date: Date): string {
+  const day = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  return `${day} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+// 文件名里的非法字符换成短横线（课程名是中文一般不会中招，顺手挡一下）。
+function sanitizeFileName(value: string): string {
+  return String(value || "").replace(/[\\/:*?"<>|]/g, "-").trim() || "错题本";
+}
+
 const DEFAULT_BANK: QuizBank = getAgentBank("py") || {};
 const DEFAULT_DEVICE_INFO = getRuntimeDeviceInfo();
+
+// 只有「按专题出题」的两种方式需要先挑专题，试卷练习与随机练习都是整门课范围，不显示专题按钮。
+const TOPIC_SCOPED_ACTIONS = ["topic-single", "topic-judge"];
 
 Page<QuizData, QuizPageInstance>({
   data: {
@@ -148,6 +169,7 @@ Page<QuizData, QuizPageInstance>({
     errorList: [],
     hasNoErrors: true,
     showErrorBook: false,
+    showTopicPicker: false,
     examMode: false,
     examProgressText: ""
   },
@@ -346,7 +368,18 @@ Page<QuizData, QuizPageInstance>({
       selectedAction: mode,
       showErrorBook: false
     });
+    // 先刷新一次视图状态：万一这门课没有该题型的题，makeQuestion 会直接 toast 返回，
+    // 那时专题按钮该显示也得显示（否则选中态和可见的按钮区对不上）。
+    this.updateComputedViewState();
     this.makeQuestion(selected.type, questions);
+  },
+
+  // 占位入口（真题练习）：先把位置占住，别让一整行少一格；接了题库后换成真实出题逻辑。
+  showPendingMode() {
+    wx.showToast({
+      title: "真题练习正在准备中",
+      icon: "none"
+    });
   },
 
   startExam() {
@@ -428,20 +461,72 @@ Page<QuizData, QuizPageInstance>({
     });
   },
 
+  // 错题本导出：写成 Markdown 语法的 .txt 落到小程序用户目录，再唤起微信的「发送文件」面板，
+  // 用户在那里选「文件传输助手」就能把文件存进自己的微信。
+  buildErrorBookMarkdown(): string {
+    const topicNames = new Map(this.data.topics.map(topic => [topic.key, topic.name] as [string, string]));
+    const lines = [
+      `# 《${this.data.title}》错题本`,
+      "",
+      `- 导出时间：${formatExportTime(new Date())}`,
+      `- 错题数量：${this.data.errorList.length} 题`,
+      ""
+    ];
+
+    this.data.errorList.forEach((item, index) => {
+      lines.push(`## ${index + 1}. ${topicNames.get(item.topic) || item.topic || "未归类"}`);
+      lines.push("");
+      lines.push(item.question);
+      lines.push("");
+      lines.push(`**正确答案**：${item.answer}`);
+      lines.push("");
+    });
+
+    // 最后一项已经补过空行，join 出来正好以换行收尾。
+    return lines.join("\n");
+  },
+
   exportErrors() {
     if (!this.data.errorList.length) {
       wx.showToast({ title: "当前还没有错题", icon: "none" });
       return;
     }
 
-    const text = [
-      `《${this.data.title}》错题本`,
-      "",
-      ...this.data.errorList.map((item, index) => `${index + 1}. ${item.question}\n正确答案：${item.answer}`)
-    ].join("\n\n");
+    const markdown = this.buildErrorBookMarkdown();
+    const fileName = `错题本-${sanitizeFileName(this.data.title || this.data.kind)}.txt`;
+    const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`;
+    const shareFileMessage = wx.shareFileMessage;
+
+    if (typeof shareFileMessage !== "function") {
+      this.copyErrorBook(markdown);
+      return;
+    }
+
+    try {
+      // 文件名固定按课程来，重复导出只覆盖同一个文件，不会在小程序目录里越堆越多。
+      wx.getFileSystemManager().writeFileSync(filePath, markdown, "utf8");
+    } catch {
+      this.copyErrorBook(markdown);
+      return;
+    }
+
+    shareFileMessage({
+      filePath,
+      fileName,
+      success: () => wx.showToast({ title: "错题本已发送", icon: "success" }),
+      fail: error => {
+        // 用户自己取消转发不算失败，不用再塞一次剪贴板。
+        if (String((error && error.errMsg) || "").indexOf("cancel") >= 0) return;
+        this.copyErrorBook(markdown);
+      }
+    });
+  },
+
+  // 退路：老版本微信没有发送文件的接口，或写文件失败时，退回「复制 Markdown 到剪贴板」。
+  copyErrorBook(markdown: string) {
     wx.setClipboardData({
-      data: text,
-      success: () => wx.showToast({ title: "错题本已复制", icon: "success" })
+      data: markdown,
+      success: () => wx.showToast({ title: "已复制 Markdown 到剪贴板", icon: "none", duration: 2500 })
     });
   },
 
@@ -624,7 +709,8 @@ Page<QuizData, QuizPageInstance>({
     this.setData({
       topics,
       currentQuestion,
-      hasNoErrors: this.data.errorList.length === 0
+      hasNoErrors: this.data.errorList.length === 0,
+      showTopicPicker: TOPIC_SCOPED_ACTIONS.includes(this.data.selectedAction)
     });
   }
 });

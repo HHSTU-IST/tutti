@@ -89,6 +89,14 @@
   border-color: #173d7a;
 }
 
+/* 真题练习只是先把位置占住，功能没接：虚线灰边，点了给一句 toast，别让人以为按坏了。 */
+.mode-btn.pending {
+  background: #fbfcfe;
+  border-style: dashed;
+  border-color: #c7d2e0;
+  color: #98a2b3;
+}
+
 .topic-span-full {
   grid-column: 1 / -1;
 }
@@ -99,6 +107,11 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12rpx 16rpx;
+}
+
+/* 专题按钮只在「专题单选 / 专题判断」时出现，所以自己带一层卡片与标题，别看起来像凭空冒出来。 */
+.topic-picker {
+  padding: 24rpx;
 }
 
 .option-list {
@@ -345,7 +358,8 @@
   .error-book,
   .empty-state,
   .actions,
-  .progress {
+  .progress,
+  .topic-picker {
     padding-left: 18rpx;
     padding-right: 18rpx;
   }
