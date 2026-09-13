@@ -1,7 +1,11 @@
 export { };
 
 import { RuntimeDeviceInfo, getRuntimeDeviceInfo } from "./services/device";
-import { RUNTIME_CONFIG, findMissingProductionConfig } from "./services/runtime-config";
+import {
+  RUNTIME_CONFIG,
+  findMissingProductionConfig,
+  findProductionConfigHints
+} from "./services/runtime-config";
 
 export interface AppGlobalData {
   appName: string;
@@ -30,6 +34,12 @@ App<{ globalData: AppGlobalData }>({
       console.error(
         `[tutti] 生产配置缺失：${missing.join("、")}。请补全 services/runtime-config.ts 后再发布。`
       );
+    }
+
+    // 建议项只提示不阻断：例如多环境部署忘了填 cloudEnv。
+    const hints = findProductionConfigHints();
+    if (hints.length) {
+      console.warn(`[tutti] 生产配置待确认：${hints.join("、")}。`);
     }
   },
 

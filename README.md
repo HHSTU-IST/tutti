@@ -42,11 +42,11 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 - **WorkBuddy「发布为应用」**：目录选 `web/`，语言 `node`，启动命令 `node server.js`。注意发布只上传该目录，所以**必须先跑构建脚本**生成自包含数据；服务需监听 `PORT` 并绑定 `0.0.0.0`（已默认如此）。
 - **运行期环境变量**：除 `PORT` / `HOST` 外还有三个与数据落盘相关的变量。
 
-  | 变量               | 默认值                    | 作用                                             |
-  | ------------------ | ------------------------- | ------------------------------------------------ |
-  | `TUTTI_DATA_DIR`   | `web/data`                | 运行数据目录：会话、上传规则、学员作业都落这里   |
-  | `TUTTI_SESSION_STORE` | `file`                 | `file` 落盘（重启不掉线）/ `memory` 纯进程内存   |
-  | `TUTTI_SESSION_DIR` | `<TUTTI_DATA_DIR>/sessions` | 单独指定会话目录，一般不用改                   |
+  | 变量                  | 默认值                      | 作用                                           |
+  | --------------------- | --------------------------- | ---------------------------------------------- |
+  | `TUTTI_DATA_DIR`      | `web/data`                  | 运行数据目录：会话、上传规则、学员作业都落这里 |
+  | `TUTTI_SESSION_STORE` | `file`                      | `file` 落盘（重启不掉线）/ `memory` 纯进程内存 |
+  | `TUTTI_SESSION_DIR`   | `<TUTTI_DATA_DIR>/sessions` | 单独指定会话目录，一般不用改                   |
 
   有持久卷的机器上指向它即可，发布前后各跑一次自检：
 
@@ -70,16 +70,18 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 
 1. 用**微信开发者工具**（稳定版）导入仓库根目录；`project.config.json` 里的 `appid` 目前是 `wxf7f1812c7c4f4106`，换成自己的需在微信公众平台注册后修改该字段。
 2. **本地调试**：把 `data/access.ts` 里要测的课程置为 `true`，开发者工具扫码登录即可进入（详见「扫码测试登录」）。
-3. **接后台授权**：填 `services/runtime-config.ts` 中 `PRODUCTION_RUNTIME_CONFIG.wechatLoginApiUrl`。**当前为空，不填线上会白屏**——这是发布前最容易被漏掉的一项。
-4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。`app.ts` 的 `wx.cloud.init()` 默认走默认环境；多环境部署时在 `services/runtime-config.ts` 填 `cloudEnv` 指定环境 ID。
+3. **接后台授权**：填 `services/runtime-config.ts` 中 `PRODUCTION_RUNTIME_CONFIG.wechatLoginApiUrl`（必须 HTTPS）。**当前为空，不填线上会白屏**——这是发布前最容易被漏掉的一项；启动时 `console.error` 会打印缺哪一项，首页也会显示「生产配置缺失」。
+4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。`app.ts` 的 `wx.cloud.init()` 默认走默认环境；多环境部署时在 `services/runtime-config.ts` 填 `cloudEnv` 指定环境 ID（留空时启动会 `console.warn` 提示）。云数据库读写失败时答题页会降级为本地使用并弹 toast，不会白屏。
 5. **发布**：开发者工具右上角「上传」填版本号 → 微信公众平台「版本管理」提交审核 → 审核通过点「发布」。体验版（`envVersion=trial`）与正式版走同一套生产配置，可先拿它做真机验证。
 
-小程序发布前自检：
+小程序发布前自检（`node scripts/miniprogram-release-check.cjs` 逐项自检，退出码非 0 即还有未通过项；`[手工]` 项脚本判不了）：
 
-- [ ] `wechatLoginApiUrl` 已填且为 HTTPS（未填时启动会打印生产配置缺失告警）
-- [ ] 云环境已建 `user_profiles` 集合（多环境需填 `cloudEnv`）
-- [ ] 生产开通由后台 `agents` 返回决定（本地测试开关是 `data/access.ts`）
+- [ ] `wechatLoginApiUrl` 已填且为 HTTPS（未填时启动会 `console.error` 缺失项，首页也会显示「生产配置缺失，请联系管理员」，而不是笼统的「未读取到可用授权」）
+- [ ] 云环境已建 `user_profiles` 集合（多环境需填 `cloudEnv`；留空走默认环境，自检会提示）
+- [x] 生产开通由后台 `agents` 返回决定（本地测试开关是 `data/access.ts`，只在开发配置生效：`enableLocalWechatTestLogin=false` 时完全不读；自检会校验这个开关没被改回来）
 - [ ] trial 体验版真机跑通再提审
+
+自检脚本顺带会查：`appid` 是否已填、`project.config.json` 有没有漏排除 `web/` 与 `scripts/`（否则包体白涨）、`app.json` 声明的页面文件是否齐全。
 
 ## 使用说明
 

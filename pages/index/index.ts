@@ -3,6 +3,7 @@ export { };
 import { RuntimeDeviceInfo, formatRuntimePlatform, getRuntimeDeviceInfo } from "../../services/device";
 import { UserSession, resolveUserSession, restoreUserSession } from "../../services/purchase";
 import { CourseOption, listAgentCourses } from "../../services/registry";
+import { findMissingProductionConfig } from "../../services/runtime-config";
 
 type LoginState = "idle" | "loading" | "ready" | "denied";
 
@@ -84,7 +85,7 @@ Page<IndexData, IndexPageInstance>({
         wechatIdDisplay: "未读取",
         unlockedCount: 0,
         courseList: buildCourseCards(null),
-        statusText: "未读取到可用授权",
+        statusText: buildDeniedStatusText(),
         isLoading: false
       });
       return;
@@ -142,4 +143,12 @@ function buildCourseCards(session: UserSession | null): CourseCard[] {
 function maskWechatId(openId: string): string {
   if (openId.length <= 8) return openId;
   return `${openId.slice(0, 4)}****${openId.slice(-4)}`;
+}
+
+// 生产配置没填全时，真机上看到的「未读取到可用授权」会被误判成后台故障，
+// 这里换成指向配置的提示；具体缺哪项由 app.ts 打到开发者工具 console。
+function buildDeniedStatusText(): string {
+  return findMissingProductionConfig().length
+    ? "生产配置缺失，请联系管理员（详见开发者工具日志）"
+    : "未读取到可用授权";
 }

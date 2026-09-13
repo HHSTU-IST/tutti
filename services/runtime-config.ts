@@ -55,3 +55,17 @@ export function findMissingProductionConfig(): string[] {
   }
   return missing;
 }
+
+/**
+ * 生产配置的「建议项」：不影响能否跑通，但漏了容易在真机上踩坑。
+ * 多环境时 cloudEnv 留空会连上默认云环境，学员的答题记录就写到别处去了。
+ */
+export function findProductionConfigHints(): string[] {
+  if (!IS_PRODUCTION_RUNTIME) return [];
+
+  const hints: string[] = [];
+  if (!RUNTIME_CONFIG.cloudEnv) {
+    hints.push("cloudEnv（留空会连默认云环境，多环境部署请填环境 ID）");
+  }
+  return hints;
+}
