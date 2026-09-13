@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 小程序发布前自检：把 README「小程序发布前自检」里能自动判定的项一次跑完。
+// 小程序发布前自检：把 docs/development.md「部署清单 · 小程序」里能自动判定的项一次跑完。
 // 退出码非 0 表示还有未通过项；[手工] 项脚本判不了，需要在真机 / 云开发控制台确认。
 const fs = require("fs");
 const path = require("path");
@@ -219,7 +219,7 @@ function printReport() {
 }
 
 function main() {
-  console.log("小程序发布前自检（对应 README「小程序发布前自检」）\n");
+  console.log("小程序发布前自检（对应 docs/development.md 的「部署清单 · 小程序」）\n");
   runAllChecks();
   printReport();
 }

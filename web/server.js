@@ -7,6 +7,7 @@ const auth = require("./lib/auth.cjs");
 const uploadRules = require("./lib/upload-rules.cjs");
 const { ensureWritable, isInsideAppDir } = require("./lib/data-dir.cjs");
 const { checkNodeVersion } = require("./lib/node-version.cjs");
+const { markBoot, readState } = require("./lib/runtime-state.cjs");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -127,6 +128,19 @@ function handleLogout(req, res) {
     "Set-Cookie": auth.expiredCookie()
   });
   return res.end(JSON.stringify({ ok: true }));
+}
+
+function handleHealth() {
+  const state = readState() || {};
+
+  return {
+    status: "ok",
+    // 重新发布后 boots 若从 1 重新计数、firstBootAt 变了，说明数据目录被平台重建过。
+    dataDirBoots: Number(state.boots) || 0,
+    dataDirFirstBootAt: state.firstBootAt || "",
+    uptimeSec: Math.round(process.uptime()),
+    courses: banks.catalog.length
+  };
 }
 
 function handleCourses(session) {
@@ -276,6 +290,11 @@ async function handleApi(req, res, pathname, body) {
     return handleLogout(req, res);
   }
 
+  // 给平台做健康检查用；不暴露路径与版本，只报告「这个数据目录被保留了吗」。
+  if (pathname === "/api/health") {
+    return sendJson(res, 200, handleHealth());
+  }
+
   const session = requireSession(req, res);
   if (!session) return undefined;
 
@@ -385,7 +404,10 @@ function logDeploymentDiagnostics() {
     console.warn(`  [告警] ${node.message}`);
   }
 
-  console.log(`运行数据目录: ${store.dataDir}`);
+  const boot = markBoot();
+  console.log(
+    `运行数据目录: ${store.dataDir}（第 ${boot.boots} 次启动，首次 ${boot.firstBootAt}）`
+  );
   if (!ensureWritable(store.dataDir)) {
     console.warn("  [告警] 目录不可写：上传规则、学员作业与登录会话都会存不住。请用 TUTTI_DATA_DIR 指向可写目录。");
   } else if (isInsideAppDir(store.dataDir)) {

@@ -1,8 +1,8 @@
 # 开发文档
 
-面向要改这个仓库的人：架构、实现细节、接口契约、本地开发与自检都在这里。
+面向要改这个仓库的人：架构、实现细节、接口契约、本地开发、部署清单都在这里。
 
-部署步骤、部署清单与使用说明在根目录 [README](../README.md)，试卷智能体的设计说明在 [design.md](./design.md)。
+部署步骤与使用说明在根目录 [README](../README.md)，试卷智能体的设计说明在 [design.md](./design.md)。
 
 ## 项目架构
 
@@ -93,6 +93,7 @@
 - 目录本身不共享时得自己接 Redis 之类共享存储，或设 `TUTTI_SESSION_STORE=memory` 退回单进程内存（重启掉线）。
 - **进行中的练习只在内存**：组卷结果（含答案）不落盘，重启后重新组卷即可，已答题目与错题记录以浏览器端为准。
 - **上传文件落磁盘**：作业在 `${TUTTI_DATA_DIR}/uploads/`、管理员规则在 `${TUTTI_DATA_DIR}/upload-rules.json`，默认落在 `web/data`——该目录随发布一起被覆盖，线上必须把 `TUTTI_DATA_DIR` 指到持久化目录。
+- **启动记录**：每次启动都会更新 `${TUTTI_DATA_DIR}/runtime-state.json`（`firstBootAt` / `lastBootAt` / `boots`）。`GET /api/health` 会回显 `boots` 与 `firstBootAt`：重新发布后这两个值若重置，说明平台重建了数据目录，上传规则与作业其实没被保住——这是判断「目录到底持不持久」的唯一实测依据，别靠猜。
 - 会话 id 会被拼进文件名，所以读取前先卡 `^[a-f0-9]{32,128}$`，挡掉 `../` 这类路径穿越写法。
 
 ### 上传规则（仅管理员可编辑）
@@ -117,18 +118,19 @@ GET  /api/uploads           # 自己的上传记录；管理员看全部
 
 ### 接口
 
-| 方法    | 路径                      | 说明                            |
-| ------- | ------------------------- | ------------------------------- |
-| POST    | `/api/login`              | 登录，下发 HttpOnly 会话 Cookie |
-| POST    | `/api/logout`             | 退出                            |
-| GET     | `/api/me`                 | 当前账号与已解锁课程            |
-| GET     | `/api/courses`            | 课程列表，含 `unlocked` 标记    |
-| GET     | `/api/courses/:id/topics` | 专题列表，未开通返回 403        |
-| POST    | `/api/quiz`               | 组卷，未开通返回 403            |
-| POST    | `/api/quiz/check`         | 判题，返回对错、正确答案、解析  |
-| GET/PUT | `/api/settings/upload`    | 上传规则；PUT 仅管理员          |
-| POST    | `/api/upload`             | 上传作业，按规则校验            |
-| GET     | `/api/uploads`            | 上传记录                        |
+| 方法    | 路径                      | 说明                                                                                                      |
+| ------- | ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| GET     | `/api/health`             | 免登录健康检查：`dataDirBoots` / `dataDirFirstBootAt` / `uptimeSec` / `courses`（不回显路径与运行时细节） |
+| POST    | `/api/login`              | 登录，下发 HttpOnly 会话 Cookie                                                                           |
+| POST    | `/api/logout`             | 退出                                                                                                      |
+| GET     | `/api/me`                 | 当前账号与已解锁课程                                                                                      |
+| GET     | `/api/courses`            | 课程列表，含 `unlocked` 标记                                                                              |
+| GET     | `/api/courses/:id/topics` | 专题列表，未开通返回 403                                                                                  |
+| POST    | `/api/quiz`               | 组卷，未开通返回 403                                                                                      |
+| POST    | `/api/quiz/check`         | 判题，返回对错、正确答案、解析                                                                            |
+| GET/PUT | `/api/settings/upload`    | 上传规则；PUT 仅管理员                                                                                    |
+| POST    | `/api/upload`             | 上传作业，按规则校验                                                                                      |
+| GET     | `/api/uploads`            | 上传记录                                                                                                  |
 
 ### 已知限制
 
@@ -236,11 +238,36 @@ const access: Record<string, boolean> = {
 
 ```bash
 node --test                                   # 全部用例：小程序自检、接口、安全、部署、前端静态一致性
-node scripts/web-deploy-check.cjs             # 网页版部署自检
+node scripts/deploy-web.cjs [--clean]         # 网页版发布前一条命令：构建 + 上传包检查 + 自检 + 发布参数
+node scripts/web-deploy-check.cjs             # 只跑部署自检（含运行数据目录判定）
 node scripts/miniprogram-release-check.cjs    # 小程序发布前自检
 ```
 
 网页端测试会临时起服务，并把会话、上传规则、作业文件全部指向临时目录（`TUTTI_DATA_DIR`、`TUTTI_ACCOUNTS_PATH`），不读写仓库里的真实数据，多个测试文件并行也不会互踩。`scripts/web-public.test.cjs` 还会检查前端静态资源的一致性（app.js 引用的 id 是否都存在、有没有 `alert()`、CSS 反模式等）。
+
+## 部署清单
+
+发布前逐项过一遍。两条通道各有一个自检脚本，退出码非 0 即还有未通过项。
+
+### 网页版
+
+`node scripts/web-deploy-check.cjs` 逐项自检；发布前也可以直接跑一条命令 `node scripts/deploy-web.cjs --clean`（重建产物 + 上传包检查 + 自检 + 打印发布参数）。
+
+- [x] 默认密码不再硬编码：`init` 生成的密码是随机的（也可用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定），已上线的存量账号由自检脚本复核是否还在用 `admin2026` / `demo2026`
+- [x] `data/accounts.json` 与 `web/data/accounts.json` 已 `git rm --cached` 并写入 `.gitignore`，账号盐值与哈希不再进公开仓库
+- [x] 会话默认落盘：一个会话一个 JSON 文件，放在 `TUTTI_DATA_DIR/sessions/`，重启不掉线；多实例把 `TUTTI_DATA_DIR` 指向同一持久化目录即共用会话（见 [会话与运行数据](#会话与运行数据)）
+- [ ] `web/data/uploads/` 与 `web/data/upload-rules.json` 需要持久化：启动日志与自检会告警「数据目录在应用目录内」。用 `node scripts/deploy-web.cjs --clean` 发布后实测三步：① 打开线上地址让服务启动，`curl -s https://<域名>/api/health` 记下 `dataDirBoots` 与 `dataDirFirstBootAt`（刚发布应为 `boots=1`）；② 改一次上传规则再 `--clean` 重新发布；③ 回看这两个值——`boots` 继续累加且 `firstBootAt` 不变说明目录被保住，若回到 1 或时间变化则要把 `TUTTI_DATA_DIR` 指向平台提供的持久化目录
+
+### 小程序
+
+`node scripts/miniprogram-release-check.cjs` 逐项自检（`[手工]` 项脚本判不了，需人工确认）：
+
+- [ ] `wechatLoginApiUrl` 已填且为 HTTPS（未填时启动会 `console.error` 缺失项，首页也会显示「生产配置缺失，请联系管理员」，而不是笼统的「未读取到可用授权」）
+- [ ] 云环境已建 `user_profiles` 集合（多环境需填 `cloudEnv`；留空走默认环境，自检会提示）
+- [x] 生产开通由后台 `agents` 返回决定（本地测试开关是 `data/access.ts`，只在开发配置生效：`enableLocalWechatTestLogin=false` 时完全不读；自检会校验这个开关没被改回来）
+- [ ] trial 体验版真机跑通再提审
+
+自检脚本顺带会查：`appid` 是否已填、`project.config.json` 有没有漏排除 `web/`、`scripts/`、`docs/`、`templates/`、`outputs/`（否则包体白涨）、`app.json` 声明的页面文件是否齐全、以及各题库 `_config` 与注册表是否对齐。
 
 ## 试卷生成流水线
 

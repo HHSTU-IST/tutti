@@ -77,6 +77,20 @@ test.after(() => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test("健康检查免登录可用，且不泄露服务器路径", async () => {
+  cookie = "";
+  const health = await call("/api/health");
+
+  assert.equal(health.status, 200);
+  assert.equal(health.data.status, "ok");
+  assert.equal(typeof health.data.dataDirBoots, "number");
+  assert.equal(typeof health.data.uptimeSec, "number");
+
+  const serialized = JSON.stringify(health.data);
+  assert.equal(serialized.includes(tempDir), false, "健康检查不应回显数据目录路径");
+  assert.equal(serialized.includes("node"), false, "健康检查不应回显运行时细节");
+});
+
 test("未登录时接口返回 401", async () => {
   cookie = "";
   const me = await call("/api/me");
