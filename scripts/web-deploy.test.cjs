@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -156,6 +157,18 @@ test("Node 版本要求：engines、常量与 README 三处一致", () => {
   assert.equal(checkNodeVersion("18.20.4").ok, false);
   assert.equal(checkNodeVersion("24.21.0").ok, true);
   assert.equal(checkNodeVersion().ok, true, "跑测试的 Node 应满足项目要求");
+});
+
+test("账号表默认读仓库 data/accounts.json，没有第二份副本", () => {
+  const modulePath = path.join(__dirname, "../web/lib/auth.cjs");
+  const result = spawnSync(
+    process.execPath,
+    ["-e", `delete process.env.TUTTI_ACCOUNTS_PATH; console.log(require(${JSON.stringify(modulePath)}).ACCOUNTS_PATH);`],
+    { cwd: path.join(__dirname, ".."), encoding: "utf8" }
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), path.join(__dirname, "..", "data", "accounts.json"));
 });
 
 test("默认密码自检能检出 admin2026，改掉后放行", () => {

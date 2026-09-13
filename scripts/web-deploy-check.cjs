@@ -1,17 +1,10 @@
 #!/usr/bin/env node
-// 网页版部署清单自检：默认密码、账号表同步、会话存储、运行数据目录。
-// 每项打印 [OK] 或 [!!]，有任何一项未通过时退出码为 1，可接进发布流程。
-const fs = require("fs");
-const path = require("path");
-
+// 网页版运行自检：账号表、默认密码、会话存储、运行数据目录。
+// 启动服务前跑一遍（或接进自己的部署流程）：每项打印 [OK] / [!!] / [提示]，有 [!!] 时退出码为 1。
 const auth = require("../web/lib/auth.cjs");
 const uploadRules = require("../web/lib/upload-rules.cjs");
 const { DATA_DIR, ensureWritable, isInsideAppDir } = require("../web/lib/data-dir.cjs");
 const { createReporter } = require("./check-report.cjs");
-
-const APP_DIR = path.join(__dirname, "..");
-const REPO_ACCOUNTS = path.join(APP_DIR, "data", "accounts.json");
-const BUNDLED_ACCOUNTS = path.join(APP_DIR, "web", "data", "accounts.json");
 
 const reporter = createReporter();
 
@@ -40,24 +33,8 @@ function checkAccounts() {
     risky.length === 0,
     "默认密码已替换",
     risky.length
-      ? `仍在用历史默认密码：${risky.join("、")}\n处理：node scripts/manage-accounts.cjs passwd ${risky[0]} --random，然后重跑 node scripts/build-web-bundle.cjs`
+      ? `仍在用历史默认密码：${risky.join("、")}\n处理：node scripts/manage-accounts.cjs passwd ${risky[0]} --random，然后重启服务`
       : "未检出 admin2026 / demo2026"
-  );
-
-  if (!fs.existsSync(REPO_ACCOUNTS)) return;
-
-  if (!fs.existsSync(BUNDLED_ACCOUNTS)) {
-    report(false, "账号表已同步到发布目录", "缺少 web/data/accounts.json：先跑 node scripts/build-web-bundle.cjs");
-    return;
-  }
-
-  const synced = fs.readFileSync(REPO_ACCOUNTS, "utf8") === fs.readFileSync(BUNDLED_ACCOUNTS, "utf8");
-  report(
-    synced,
-    "账号表已同步到发布目录",
-    synced
-      ? "data/accounts.json 与 web/data/accounts.json 一致"
-      : "两份不一致：改过密码或课程后要重跑 node scripts/build-web-bundle.cjs，否则线上还是旧账号"
   );
 }
 
@@ -75,34 +52,36 @@ function checkSessionStore() {
 }
 
 function checkDataDir() {
-  const writable = ensureWritable(DATA_DIR);
-  const inside = isInsideAppDir(DATA_DIR);
-
-  if (writable && !inside) {
+  if (!ensureWritable(DATA_DIR)) {
     report(
-      true,
-      "运行数据已持久化",
-      `数据目录：${DATA_DIR}\n上传规则：${uploadRules.RULES_PATH}\n学员作业：${uploadRules.UPLOADS_DIR}`
+      false,
+      "数据目录可写",
+      `目录不可写：${DATA_DIR}\n用 TUTTI_DATA_DIR 指到一个可写目录，否则上传规则、学员作业与登录会话都存不住`
     );
     return;
   }
 
-  const detail = !writable
-    ? `数据目录不可写：${DATA_DIR}\n用 TUTTI_DATA_DIR 指向平台提供的可写持久化目录`
-    : `数据目录在应用目录内：${DATA_DIR}\n重新发布会连登录会话、上传规则与学员作业一起覆盖，用 TUTTI_DATA_DIR 指向持久化目录`;
-
-  // 平台重建目录这件事只能在发布后用 /api/health 实测（boots/firstBootAt），
-  // 所以发布脚本可以显式声明「先发布、再复核」，把它降级成提示。
-  if (process.env.TUTTI_ALLOW_UNPERSISTED_DATA === "1") {
-    reporter.hint("运行数据已持久化", `${detail}\n（TUTTI_ALLOW_UNPERSISTED_DATA=1：允许先发布，发布后按 README 用 /api/health 复核）`);
+  // 默认就落在 web/data：单机跑够用，但更新代码时容易被一并换掉，所以只提示、不算失败。
+  if (isInsideAppDir(DATA_DIR)) {
+    reporter.hint(
+      "运行数据位置",
+      `数据目录在应用目录内：${DATA_DIR}\n`
+        + `上传规则：${uploadRules.RULES_PATH}\n学员作业：${uploadRules.UPLOADS_DIR}\n`
+        + "更新代码（重新拉取或覆盖部署）会连会话、上传规则与作业一起换掉；想长期保留就把 TUTTI_DATA_DIR 指到应用目录之外，"
+        + "再用 GET /api/health 的 dataDirBoots / dataDirFirstBootAt 复核重启后有没有被重置。"
+    );
     return;
   }
 
-  report(false, "运行数据已持久化", detail);
+  report(
+    true,
+    "运行数据在应用目录之外",
+    `数据目录：${DATA_DIR}\n上传规则：${uploadRules.RULES_PATH}\n学员作业：${uploadRules.UPLOADS_DIR}`
+  );
 }
 
 function main() {
-  console.log("网页版部署自检（对应 docs/development.md 的「部署清单 · 网页版」）\n");
+  console.log("网页版运行自检（对应 docs/development.md 的「部署清单 · 网页版」）\n");
 
   checkAccounts();
   checkSessionStore();

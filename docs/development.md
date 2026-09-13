@@ -80,6 +80,12 @@
 
 网页版把同一套 `data/topic-*.ts` 题库发布到浏览器，**题库权限由账号决定**：已付费课程可选，未付费课程不可选，管理员账号可进入全部题库。
 
+### 题库来源
+
+`web/lib/banks.cjs` 启动时用 `web/lib/catalog.cjs` 的 `buildCatalogFromRepo()` 直接读仓库的 `data/topic-*.ts`（经 `scripts/load-topic-bank.cjs` 做 Node ≥ 22.6 的类型剥离）。没有构建步骤、也没有第二份副本：改完题库重启服务即生效。
+
+代价是一条部署约束：**`web/` 与 `data/` 必须一起存在**（服务读的是 `../data/topic-*.ts`），只拷贝 `web/` 目录是跑不起来的。课程标题与专题顺序同样取自题库 `_config`，与小程序端 `services/registry.ts` 同源。
+
 ### 权限模型
 
 - **判定在服务端完成**：`web/lib/auth.cjs` 的 `resolveEntitlements()` 是唯一权限来源。未开通课程的专题接口返回 403，题目根本不会下发到浏览器，前端改 JS 也拿不到。
@@ -135,7 +141,7 @@ GET  /api/uploads           # 自己的上传记录；管理员看全部
 ### 已知限制
 
 - **上传暂无删除接口**：管理端目前只能经 `/api/uploads` 查看；删文件需手动清理 `${TUTTI_DATA_DIR}/uploads/`（连同同目录 `index.json` 里的记录）。
-- **题型仅单/判/填**：判题引擎与构建脚本只覆盖这三种，新增题型需同时改 `services/quiz-engine.ts`、`web/lib/engine.cjs` 与 `scripts/build-web-bundle.cjs`。
+- **题型仅单/判/填**：判题引擎只覆盖这三种，新增题型需同时改 `services/quiz-engine.ts`、`web/lib/engine.cjs` 与 `web/lib/banks.cjs`（可抽取的 `TYPES` 在那里）。
 - **前端视图状态写进 URL**：`?view=course|topics|quiz|summary&course=<id>&topic=<key>&count=<n>&type=<t>`，由 `web/public/app.js` 的 `show()` / `restoreFromUrl()` 维护；改视图切换逻辑时要同步这两处。
 - **备份**：定期备份 `data/accounts.json`（账号与课程权限）与整个 `TUTTI_DATA_DIR`（会话、上传规则、作业文件）。
 
@@ -156,7 +162,7 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 
 `init` 建的两个账号是 `admin`（管理员，全部题库）与 `demo`（仅 `py`）。密码不是固定的：默认随机生成并在 `init` 时打印一次，也可以在 `init` 前用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定。
 
-> 账号真源是 `data/accounts.json`，CLI 只改这一处；改完后重跑 `node scripts/build-web-bundle.cjs` 同步到 `web/data/accounts.json`，再重新发布才在线上生效（发布沙箱只上传 `web/`）。
+> 账号真源是 `data/accounts.json`，CLI 只改这一处，服务端读的也是这一处：改完重启服务即生效。已经在用的人要重新登录一次，才会带上新的课程权限（会话里的解锁课程是登录时定的）。
 
 ## 微信登录授权接口
 
@@ -237,9 +243,8 @@ const access: Record<string, boolean> = {
 ### 测试与自检
 
 ```bash
-node --test                                   # 全部用例：小程序自检、接口、安全、部署、前端静态一致性
-node scripts/deploy-web.cjs [--clean]         # 网页版发布前一条命令：构建 + 上传包检查 + 自检 + 发布参数
-node scripts/web-deploy-check.cjs             # 只跑部署自检（含运行数据目录判定）
+node --test                                   # 全部用例：小程序自检、接口、安全、运行数据、前端静态一致性
+node scripts/web-deploy-check.cjs             # 网页版启动前自检（账号表、默认密码、会话落盘、数据目录）
 node scripts/miniprogram-release-check.cjs    # 小程序发布前自检
 ```
 
@@ -247,16 +252,16 @@ node scripts/miniprogram-release-check.cjs    # 小程序发布前自检
 
 ## 部署清单
 
-发布前逐项过一遍。两条通道各有一个自检脚本，退出码非 0 即还有未通过项。
+启动（网页版）或发布（小程序）前逐项过一遍。两条通道各有一个自检脚本，退出码非 0 即还有未通过项。
 
 ### 网页版
 
-`node scripts/web-deploy-check.cjs` 逐项自检；发布前也可以直接跑一条命令 `node scripts/deploy-web.cjs --clean`（重建产物 + 上传包检查 + 自检 + 打印发布参数）。
+`node scripts/web-deploy-check.cjs` 会把下面能自动判定的项跑一遍。
 
-- [x] 默认密码不再硬编码：`init` 生成的密码是随机的（也可用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定），已上线的存量账号由自检脚本复核是否还在用 `admin2026` / `demo2026`
-- [x] `data/accounts.json` 与 `web/data/accounts.json` 已 `git rm --cached` 并写入 `.gitignore`，账号盐值与哈希不再进公开仓库
+- [x] 默认密码不再硬编码：`init` 生成的密码是随机的（也可用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定），自检脚本会复核存量账号是否还在用 `admin2026` / `demo2026`
+- [x] `data/accounts.json` 已 `git rm --cached` 并写入 `.gitignore`，账号盐值与哈希不进公开仓库（真源只有这一份，服务端直接读它）
 - [x] 会话默认落盘：一个会话一个 JSON 文件，放在 `TUTTI_DATA_DIR/sessions/`，重启不掉线；多实例把 `TUTTI_DATA_DIR` 指向同一持久化目录即共用会话（见 [会话与运行数据](#会话与运行数据)）
-- [ ] `web/data/uploads/` 与 `web/data/upload-rules.json` 需要持久化：启动日志与自检会告警「数据目录在应用目录内」。用 `node scripts/deploy-web.cjs --clean` 发布后实测三步：① 打开线上地址让服务启动，`curl -s https://<域名>/api/health` 记下 `dataDirBoots` 与 `dataDirFirstBootAt`（刚发布应为 `boots=1`）；② 改一次上传规则再 `--clean` 重新发布；③ 回看这两个值——`boots` 继续累加且 `firstBootAt` 不变说明目录被保住，若回到 1 或时间变化则要把 `TUTTI_DATA_DIR` 指向平台提供的持久化目录
+- [ ] 运行数据要不要挪出应用目录：默认 `TUTTI_DATA_DIR=web/data`，更新代码会连登录会话、上传规则与学员作业一起换掉（自检里这条是 `[提示]`，不算未通过）。打算长期用就用 `TUTTI_DATA_DIR` 指到应用目录之外；之后每次重启或更新代码，用 `GET /api/health` 的 `dataDirBoots` / `dataDirFirstBootAt` 复核——`boots` 继续累加且 `firstBootAt` 不变，说明数据目录稳住了
 
 ### 小程序
 

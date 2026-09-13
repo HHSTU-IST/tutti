@@ -1,11 +1,8 @@
-const fs = require("fs");
 const path = require("path");
 
-// 发布沙箱只上传 web/ 目录，因此运行期一律读 web/data 下的构建产物。
-// 在仓库内开发时若还没构建，则退回直接读取 data/topic-*.ts。
-const BUNDLE_DIR = path.join(__dirname, "../data");
-const BUNDLE_MANIFEST = path.join(BUNDLE_DIR, "courses.json");
-const BUNDLE_BANKS_DIR = path.join(BUNDLE_DIR, "banks");
+// 题库只有一份真源：仓库的 data/topic-*.ts（Node ≥ 22.6 的类型剥离，见 scripts/load-topic-bank.cjs）。
+// 网页端直接在仓库里跑，运行期读的就是它，改完题库重启服务即生效，没有第二份副本要同步。
+// 所以 web/ 必须与 data/ 一起部署（整个仓库一起上，或至少这两个目录保持相对位置）。
 const REPO_DATA_DIR = path.join(__dirname, "../../data");
 
 const { buildCatalogFromRepo, summarize } = require("./catalog.cjs");
@@ -13,23 +10,11 @@ const { buildCatalogFromRepo, summarize } = require("./catalog.cjs");
 const TYPES = ["single", "judge", "fill"];
 const ALL_TOPICS = "__all__";
 
-function loadBundledCatalog() {
-  if (!fs.existsSync(BUNDLE_MANIFEST)) return null;
+const catalog = buildCatalogFromRepo().map(entry => {
+  const { bank, ...course } = entry;
+  return Object.assign(course, summarize(course.topics));
+});
 
-  const courses = JSON.parse(fs.readFileSync(BUNDLE_MANIFEST, "utf8")).courses;
-  if (!Array.isArray(courses) || !courses.length) return null;
-
-  return courses.map(course => Object.assign({}, course, summarize(course.topics)));
-}
-
-function loadRepoCatalog() {
-  return buildCatalogFromRepo().map(entry => {
-    const { bank, ...course } = entry;
-    return Object.assign(course, summarize(course.topics));
-  });
-}
-
-const catalog = loadBundledCatalog() || loadRepoCatalog();
 const courseMap = new Map(catalog.map(course => [course.id, course]));
 const bankCache = new Map();
 
@@ -41,10 +26,7 @@ function getBank(courseId) {
   if (!getCourse(courseId)) return null;
   if (bankCache.has(courseId)) return bankCache.get(courseId);
 
-  const bundledPath = path.join(BUNDLE_BANKS_DIR, `${courseId}.json`);
-  const bank = fs.existsSync(bundledPath)
-    ? JSON.parse(fs.readFileSync(bundledPath, "utf8"))
-    : require("../../scripts/load-topic-bank.cjs").loadTopicBank(courseId);
+  const bank = require("../../scripts/load-topic-bank.cjs").loadTopicBank(courseId);
 
   bankCache.set(courseId, bank);
   return bank;

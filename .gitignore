@@ -31,7 +31,6 @@ dist
 
 # 运行时数据（账号盐值/哈希、会话、上传规则、学员作业）——不入库，见 README「部署」
 data/accounts.json
-web/data/accounts.json
 web/data/upload-rules.json
 web/data/uploads/
 web/data/sessions/

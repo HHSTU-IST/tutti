@@ -1,5 +1,3 @@
-export { };
-
 import { RuntimeDeviceInfo, getRuntimeDeviceInfo } from "./services/device";
 import {
   RUNTIME_CONFIG,

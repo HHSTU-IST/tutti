@@ -56,12 +56,12 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 
 ## 文档与目录
 
-| 路径                                       | 内容                                                                                                                                                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 路径                                       | 内容                                                                                                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [docs/development.md](docs/development.md) | 开发文档：项目架构、题库与答题引擎、网页版实现（权限模型 / 会话与运行数据 / 上传规则 / 接口表）、已知限制、账号管理、部署清单（网页版 / 小程序）、微信登录授权契约、`user_profiles` 结构、本地调试与测试、试卷生成流水线 |
-| [docs/design.md](docs/design.md)           | 试卷智能体设计与 Word 导出格式要求                                                                                                                                                          |
-| `templates/`                               | 试卷模板与配置：`exam-template.md`、`examif.json`、`export.json`、`latex-replace.json`                                                                                                      |
-| `outputs/`                                 | 试卷脚本的生成物（`.md` / `.docx`）                                                                                                                                                         |
+| [docs/design.md](docs/design.md)           | 试卷智能体设计与 Word 导出格式要求                                                                                                                                                                                       |
+| `templates/`                               | 试卷模板与配置：`exam-template.md`、`examif.json`、`export.json`、`latex-replace.json`                                                                                                                                   |
+| `outputs/`                                 | 试卷脚本的生成物（`.md` / `.docx`）                                                                                                                                                                                      |
 
 ```text
 ├── data/       # 题库 data/topic-*.ts、本地测试开关、网页端账号表
@@ -89,26 +89,23 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 
 ### 网页版部署
 
-```bash
-# 1) 生成运行数据（改过题库或账号后必须重跑；需要 Node ≥ 22.6.0）
-node scripts/build-web-bundle.cjs
+网页版就是仓库里的一个 Node 服务：**没有构建步骤，也没有需要同步的副本**。题库（`data/topic-*.ts`）与账号表（`data/accounts.json`）都是运行期直接读的，改完重启服务即生效。
 
-# 2) 初始化账号（仅首次）
+```bash
+# 1) 初始化账号（仅首次；密码随机生成并只打印一次）
 node scripts/manage-accounts.cjs init
 
-# 3) 启动（无第三方依赖，不需要 npm install）
+# 2) 启动（无第三方依赖，不需要 npm install）
 PORT=3000 HOST=0.0.0.0 node web/server.js
-# 有持久化目录的机器上，让它把会话/规则/作业都落到那里，别留在随发布覆盖的 web/data：
+# 有持久化目录的机器上，让它把会话/规则/作业都落到那里，别留在随代码更新的 web/data：
 # TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
 
-# 4) 发布到平台（WorkBuddy「发布为应用」）前先跑这一条：重建产物 + 上传包检查 + 部署自检 + 打印发布参数
-node scripts/deploy-web.cjs
-# 加 --clean 会先清掉 web/data 下的本地运行数据（会话/作业/启动计数），别把本地状态传上线：
-node scripts/deploy-web.cjs --clean
+# 3) 启动前先自检一次（账号表、默认密码、会话落盘、运行数据目录）
+node scripts/web-deploy-check.cjs
 ```
 
-- **单机 / 容器**：任何能跑 Node 的主机起这一个进程，前面挂 Nginx 做 HTTPS 与反向代理即可。
-- **WorkBuddy「发布为应用」**：目录选 `web/`，语言 `node`，启动命令 `node server.js`，**安装命令留空**（跳过 `npm install`：沙箱里装依赖会阻塞启动，60 秒内没监听端口就发布会失败）。注意发布只上传该目录，所以**必须先跑构建脚本**生成自包含数据；服务需监听 `PORT` 并绑定 `0.0.0.0`（已默认如此）。完整发布参数（应用 ID、线上地址、发布后复核步骤）由 `node scripts/deploy-web.cjs` 打印。
+- **运行形态**：任何能跑 Node 的主机起这一个进程即可，前面挂 Nginx 做 HTTPS 与反向代理。服务默认监听 `PORT` 并绑定 `0.0.0.0`。
+- **`web/` 与 `data/` 要在一起**：服务运行期读的是 `../data/topic-*.ts` 与 `../data/accounts.json`，所以部署时带上整个仓库，或至少保持这两个目录的相对位置。
 - **运行期环境变量**：除 `PORT` / `HOST` 外还有三个与数据落盘相关的变量。
 
   | 变量                  | 默认值                      | 作用                                           |
@@ -117,18 +114,16 @@ node scripts/deploy-web.cjs --clean
   | `TUTTI_SESSION_STORE` | `file`                      | `file` 落盘（重启不掉线）/ `memory` 纯进程内存 |
   | `TUTTI_SESSION_DIR`   | `<TUTTI_DATA_DIR>/sessions` | 单独指定会话目录，一般不用改                   |
 
-  有持久卷的机器上指向它即可，发布前后各跑一次自检：
+  默认的 `web/data` 就在应用目录里，更新代码时容易被一并覆盖。想长期保留登录态、上传规则与学员作业，就把它指到应用目录之外，之后用 `GET /api/health` 的 `dataDirBoots` / `dataDirFirstBootAt` 复核（重启后 `boots` 继续累加、`firstBootAt` 不变即为正常）：
 
   ```bash
   TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
   node scripts/web-deploy-check.cjs
   ```
 
-当前线上地址：<https://tutti-quiz-web2.app.workbuddy.host/>（在「设置—数据管理—应用」中管理）。历史链接 `tutti-quiz-web.app.workbuddy.link` 已下线失效。
+**部署清单**：启动前逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/web-deploy-check.cjs` 自检，退出码非 0 即还有未通过项）。
 
-**部署清单**：发布前逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/web-deploy-check.cjs` 自检，退出码非 0 即还有未通过项）。
-
-**回滚**：重新发布旧版 `web/` 目录即可回退代码；数据回滚先恢复 `data/accounts.json` 备份，再重跑 `node scripts/build-web-bundle.cjs`。
+**更新与回滚**：拉代码后重启服务即生效（改题库、改账号、改上传规则都是这样）；代码回滚就切回旧版本再重启。动手前先备份 `data/accounts.json` 与整个 `TUTTI_DATA_DIR`。
 
 ### 小程序部署
 

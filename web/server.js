@@ -423,7 +423,7 @@ function logDeploymentDiagnostics() {
   const defaultPasswordUsers = auth.findUsersWithDefaultPassword();
   if (defaultPasswordUsers.length) {
     console.warn(`[安全告警] 以下账号仍在使用默认密码：${defaultPasswordUsers.join("、")}`);
-    console.warn("  处理：node scripts/manage-accounts.cjs passwd <账号> --random，再重跑 node scripts/build-web-bundle.cjs 并重新发布。");
+    console.warn("  处理：node scripts/manage-accounts.cjs passwd <账号> --random，然后重启服务。");
   }
 }
 

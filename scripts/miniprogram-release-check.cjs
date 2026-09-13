@@ -18,7 +18,7 @@ const README_PATH = path.join(APP_DIR, "README.md");
 
 const USER_COLLECTION = "user_profiles";
 
-// 上传包里不该出现的目录与后缀（发布沙箱按这个清单裁剪）。
+// 上传包里不该出现的目录与后缀（微信开发者工具按这个清单裁剪小程序上传包）。
 const REQUIRED_IGNORES = [
   ["folder", "web"],
   ["folder", "scripts"],

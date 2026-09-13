@@ -5,11 +5,10 @@ const crypto = require("crypto");
 const { catalog } = require("./banks.cjs");
 const { DATA_DIR } = require("./data-dir.cjs");
 
-// 账号表解析顺序：测试用临时文件 > web/data 下的发布副本 > 仓库 data/accounts.json。
-const BUNDLED_ACCOUNTS = path.join(__dirname, "../data/accounts.json");
+// 账号表只有一份真源：仓库根目录 data/accounts.json（scripts/manage-accounts.cjs 也改这一处）。
+// 测试用 TUTTI_ACCOUNTS_PATH 指向临时文件，不读写真实账号表。
 const REPO_ACCOUNTS = path.join(__dirname, "../../data/accounts.json");
-const ACCOUNTS_PATH = process.env.TUTTI_ACCOUNTS_PATH
-  || (fs.existsSync(BUNDLED_ACCOUNTS) ? BUNDLED_ACCOUNTS : REPO_ACCOUNTS);
+const ACCOUNTS_PATH = process.env.TUTTI_ACCOUNTS_PATH || REPO_ACCOUNTS;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PBKDF2_ITERATIONS = 120000;
 const SESSION_COOKIE = "sid";
