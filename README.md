@@ -1,6 +1,6 @@
 # 刷题助手
 
-hh-tutor 为原生微信小程序，不使用 Vite、Vue 或前端进行依赖构建。
+tutti 是可扩展的刷题助手，提供网页端和微信小程序。
 
 ## 项目架构
 
@@ -18,10 +18,10 @@ hh-tutor 为原生微信小程序，不使用 Vite、Vue 或前端进行依赖�
 
 两条发布通道共用 `data/topic-*.ts` 这一份题库，可只上一边，也可两边都上。
 
-| 通道 | 入口 | 登录方式 | 运行形态 |
-| --- | --- | --- | --- |
-| 网页版 | `web/` | 账号密码（自建账号表） | Node HTTP 服务，单端口 |
-| 微信小程序 | 仓库根目录 | 微信登录 + 后台授权 | 微信开发者工具上传发布 |
+| 通道       | 入口       | 登录方式               | 运行形态               |
+| ---------- | ---------- | ---------------------- | ---------------------- |
+| 网页版     | `web/`     | 账号密码（自建账号表） | Node HTTP 服务，单端口 |
+| 微信小程序 | 仓库根目录 | 微信登录 + 后台授权    | 微信开发者工具上传发布 |
 
 ### 网页版部署
 
@@ -39,10 +39,12 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 - **单机 / 容器**：任何能跑 Node 的主机起这一个进程，前面挂 Nginx 做 HTTPS 与反向代理即可。
 - **WorkBuddy「发布为应用」**：目录选 `web/`，语言 `node`，启动命令 `node server.js`。注意发布只上传该目录，所以**必须先跑构建脚本**生成自包含数据；服务需监听 `PORT` 并绑定 `0.0.0.0`（已默认如此）。
 
-网页版部署清单：
+当前线上地址：<https://tutti-quiz-web2.app.workbuddy.host/>（在「设置—数据管理—应用」中管理）。历史链接 `tutti-quiz-web.app.workbuddy.link` 已下线失效。
+
+网页版部署清单（完整可勾选版见 `docs/web-deploy-checklist.md`）：
 
 - [ ] 改掉默认密码 `admin2026` / `demo2026`（`node scripts/manage-accounts.cjs passwd <账号> <新密码>`）
-- [ ] `data/accounts.json` 与 `web/data/` 含账号哈希与上传文件，别进公开仓库，注意目录权限
+- [ ] `data/accounts.json` 与 `web/data/accounts.json` 含账号哈希，且**目前已被 git 追踪**，须 `git rm --cached` 并补 `.gitignore`，别进公开仓库
 - [ ] 会话存在进程内存，重启会掉线；多实例部署要换成共享存储
 - [ ] `web/data/uploads/` 与 `web/data/upload-rules.json` 需要持久化，否则管理员设的上传规则会丢
 
@@ -137,7 +139,7 @@ hh-tutor/
 - **页面渲染**：`pages/quiz/` 负责小程序端的题目展示和交互
 - **题型支持**：单选题、判断题、填空题
 
-## 网页版（web/）
+## 网页版（web）
 
 网页版把同一套 `data/topic-*.ts` 题库发布到浏览器，**题库权限由账号决定**：已付费课程可选，未付费课程不可选，管理员账号可进入全部题库。
 
@@ -195,18 +197,18 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 
 ### 接口
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| POST | `/api/login` | 登录，下发 HttpOnly 会话 Cookie |
-| POST | `/api/logout` | 退出 |
-| GET | `/api/me` | 当前账号与已解锁课程 |
-| GET | `/api/courses` | 课程列表，含 `unlocked` 标记 |
-| GET | `/api/courses/:id/topics` | 专题列表，未开通返回 403 |
-| POST | `/api/quiz` | 组卷，未开通返回 403 |
-| POST | `/api/quiz/check` | 判题，返回对错、正确答案、解析 |
-| GET/PUT | `/api/settings/upload` | 上传规则；PUT 仅管理员 |
-| POST | `/api/upload` | 上传作业，按规则校验 |
-| GET | `/api/uploads` | 上传记录 |
+| 方法    | 路径                      | 说明                            |
+| ------- | ------------------------- | ------------------------------- |
+| POST    | `/api/login`              | 登录，下发 HttpOnly 会话 Cookie |
+| POST    | `/api/logout`             | 退出                            |
+| GET     | `/api/me`                 | 当前账号与已解锁课程            |
+| GET     | `/api/courses`            | 课程列表，含 `unlocked` 标记    |
+| GET     | `/api/courses/:id/topics` | 专题列表，未开通返回 403        |
+| POST    | `/api/quiz`               | 组卷，未开通返回 403            |
+| POST    | `/api/quiz/check`         | 判题，返回对错、正确答案、解析  |
+| GET/PUT | `/api/settings/upload`    | 上传规则；PUT 仅管理员          |
+| POST    | `/api/upload`             | 上传作业，按规则校验            |
+| GET     | `/api/uploads`            | 上传记录                        |
 
 ### 网页端测试
 
