@@ -3,8 +3,8 @@ const path = require("path");
 // Resolved at call time so callers (and tests) can stub child_process.spawnSync.
 const childProcess = require("child_process");
 // Template is shared by every course: course-specific values are {{placeholders}}.
-const templatePath = path.join(__dirname, "../docs/exam-template.md");
-const examifPath = path.join(__dirname, "../docs/examif.json");
+const templatePath = path.join(__dirname, "../templates/exam-template.md");
+const examifPath = path.join(__dirname, "../templates/examif.json");
 const docxScriptPath = path.join(__dirname, "generate-exam-docx.py");
 const examif = JSON.parse(fs.readFileSync(examifPath, "utf8"));
 
@@ -48,7 +48,7 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
       const value = values[key];
 
       if (value === undefined || value === null) {
-        throw new Error(`试卷模板占位符 {{${key}}} 没有取值，请检查 docs/examif.json 中的配置。`);
+        throw new Error(`试卷模板占位符 {{${key}}} 没有取值，请检查 templates/examif.json 中的配置。`);
       }
 
       // 使用函数式 replacement：字符串形式的替换值会把题干里的 $& / $1 / $$ / $` 当成替换模式，
@@ -375,8 +375,8 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     const currentSpec = Object.assign({}, spec, { paperVersion: version, versionRaw: version });
     const { paper, answer, counts } = makePaper(currentSpec);
     const baseName = makePaperFileName(currentSpec, version);
-    const outPaper = path.join(__dirname, `../docs/${baseName}.md`);
-    const outAnswer = path.join(__dirname, `../docs/${baseName}k.md`);
+    const outPaper = path.join(__dirname, `../outputs/${baseName}.md`);
+    const outAnswer = path.join(__dirname, `../outputs/${baseName}k.md`);
 
     return {
       manifestEntry: buildManifestEntry({ spec: currentSpec, version, outPaper, outAnswer, paper, answer, counts }),

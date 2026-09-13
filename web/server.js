@@ -6,6 +6,7 @@ const banks = require("./lib/banks.cjs");
 const auth = require("./lib/auth.cjs");
 const uploadRules = require("./lib/upload-rules.cjs");
 const { ensureWritable, isInsideAppDir } = require("./lib/data-dir.cjs");
+const { checkNodeVersion } = require("./lib/node-version.cjs");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -376,6 +377,13 @@ const server = http.createServer((req, res) => {
 // 这三项是网页版部署最容易漏且出事后最难查的地方。
 function logDeploymentDiagnostics() {
   const store = auth.sessionStoreInfo();
+  const node = checkNodeVersion();
+
+  console.log(`Node 版本: ${node.current}（要求 ${node.required}）`);
+  if (!node.ok) {
+    // 服务本身只用内置模块，低版本还能跑；但同项目的构建与自检脚本会失败，先说清楚。
+    console.warn(`  [告警] ${node.message}`);
+  }
 
   console.log(`运行数据目录: ${store.dataDir}`);
   if (!ensureWritable(store.dataDir)) {

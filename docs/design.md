@@ -42,7 +42,7 @@
 
 ### 考试信息
 
-exam 信息需要从 `examif.json` 中读取
+exam 信息需要从 `templates/examif.json` 中读取
 
 - courseName
   - xm：机器学习概论
@@ -68,7 +68,7 @@ exam 信息需要从 `examif.json` 中读取
 
 #### 输入配置文件
 
-`examif.json` - 考试基本信息配置
+`templates/examif.json` - 考试基本信息配置
 
 ```json
 {
@@ -88,17 +88,18 @@ exam 信息需要从 `examif.json` 中读取
 - 答案文件：`{courseCode}-{yearRaw}-{termRaw}-{versionRaw}k.md`
 - Word 文档：同文件名，后缀 .docx
 
+以上文件都写在仓库根目录的 `outputs/` 下（模板与配置在 `templates/`）。
+
 #### 核心脚本
 
 1. **`scripts/generate-exam-ml.cjs`** - 试卷生成主程序
    - 从题库按知识点权重随机抽题
-   - 填充 `exam-template.md` 模板生成 Markdown 试卷
+   - 填充 `templates/exam-template.md` 模板生成 Markdown 试卷到 `outputs/`
    - 调用 Python 脚本导出 Word 文档
 
 2. **`scripts/generate-exam-docx.py`** - Word 导出工具
-   - 读取 `export.json` 样式配置
-   - 使用 python-docx 生成符合格式要求的 Word 文档
-   - 自动处理字体、字号、页边距、页码等格式
+   - 读取 `templates/export.json` 样式配置与 `templates/latex-replace.json` 数学式替换规则
+   - 先经 pandoc 转成 docx，再按配置改写 OOXML（字体、字号、页边距、页码、选项表格等）
 
 ## 待开发任务
 

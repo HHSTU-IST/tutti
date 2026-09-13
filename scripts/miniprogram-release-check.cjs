@@ -22,6 +22,8 @@ const REQUIRED_IGNORES = [
   ["folder", "scripts"],
   ["folder", "docs"],
   ["folder", "prompts"],
+  ["folder", "templates"],
+  ["folder", "outputs"],
   ["suffix", ".md"],
   ["suffix", ".cjs"],
   ["suffix", ".py"]
@@ -186,7 +188,7 @@ function checkProject() {
     "上传包排除项齐全",
     missing.length
       ? `project.config.json 的 packOptions.ignore 缺少：${missing.map(([, value]) => value).join("、")}，不排除会把网页版、脚本、文档打进包`
-      : "web、scripts、docs、prompts 与 .md / .cjs / .py 均已排除"
+      : "web、scripts、docs、prompts、templates、outputs 与 .md / .cjs / .py 均已排除"
   );
 
   const appJson = readJson(APP_JSON_PATH) || {};
