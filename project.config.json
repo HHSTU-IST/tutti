@@ -52,6 +52,14 @@
       },
       {
         "type": "folder",
+        "value": "templates"
+      },
+      {
+        "type": "folder",
+        "value": "outputs"
+      },
+      {
+        "type": "folder",
         "value": ".venv"
       },
       {

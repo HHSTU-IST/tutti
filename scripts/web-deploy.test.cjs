@@ -141,6 +141,23 @@ test("上传规则与作业文件落在 TUTTI_DATA_DIR 下", () => {
   assert.ok(fs.existsSync(path.join(dataDir, "uploads", record.storedName)), "作业应落进数据目录的 uploads/");
 });
 
+test("Node 版本要求：engines、常量与 README 三处一致", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "../web/package.json"), "utf8"));
+  const { MIN_NODE_VERSION, checkNodeVersion } = require("../web/lib/node-version.cjs");
+
+  assert.equal(pkg.engines.node, `>=${MIN_NODE_VERSION}`, "web/package.json 的 engines 必须与常量一致");
+  assert.match(MIN_NODE_VERSION, /^22\./, "项目统一要求 Node 22");
+
+  const readme = fs.readFileSync(path.join(__dirname, "../README.md"), "utf8");
+  assert.ok(readme.includes(MIN_NODE_VERSION), `README 里应写明要求的 Node 版本 ${MIN_NODE_VERSION}`);
+
+  assert.equal(checkNodeVersion(MIN_NODE_VERSION).ok, true);
+  assert.equal(checkNodeVersion("22.5.0").ok, false, "22.6 以下缺少 stripTypeScriptTypes，必须判不达标");
+  assert.equal(checkNodeVersion("18.20.4").ok, false);
+  assert.equal(checkNodeVersion("24.21.0").ok, true);
+  assert.equal(checkNodeVersion().ok, true, "跑测试的 Node 应满足项目要求");
+});
+
 test("默认密码自检能检出 admin2026，改掉后放行", () => {
   const dataDir = path.join(rootDir, "case-defaults");
   const { auth } = loadFresh(dataDir, "file");

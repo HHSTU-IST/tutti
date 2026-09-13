@@ -1,6 +1,8 @@
 const fs = require("fs");
 const Module = require("module");
 
+const { checkNodeVersion } = require("../web/lib/node-version.cjs");
+
 function withSuppressedStripTypeScriptWarning(callback) {
   const originalEmitWarning = process.emitWarning;
 
@@ -44,6 +46,11 @@ function loadTypeScriptModule(modulePath, options = {}) {
   const transformSource = options.transformSource || (source => source);
 
   if (cache && cache.has(cacheKey)) return cache.get(cacheKey);
+
+  // 类型剥离是 Node 22.6 起的能力：版本不够时给一句人话，别让调用方撞上 undefined。
+  if (typeof Module.stripTypeScriptTypes !== "function") {
+    throw new Error(`无法加载 ${modulePath}：${checkNodeVersion().message}`);
+  }
 
   const source = fs.readFileSync(modulePath, "utf8");
   const strippedSource = withSuppressedStripTypeScriptWarning(() => Module.stripTypeScriptTypes(source, {

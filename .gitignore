@@ -14,8 +14,8 @@
 *.mp4
 *.docx
 
-docs/ml-*
-!final-*.docx
+# 试卷生成物（模板与配置在 templates/，脚本产物在 outputs/）
+outputs/ml-*
 
 # Node
 *.lock
