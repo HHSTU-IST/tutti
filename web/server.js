@@ -5,6 +5,7 @@ const path = require("path");
 const banks = require("./lib/banks.cjs");
 const auth = require("./lib/auth.cjs");
 const uploadRules = require("./lib/upload-rules.cjs");
+const { ensureWritable, isInsideAppDir } = require("./lib/data-dir.cjs");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -63,7 +64,7 @@ function readJsonBody(req, limitBytes = MAX_BODY_BYTES) {
       if (!raw) return resolve({});
       try {
         resolve(JSON.parse(raw));
-      } catch (error) {
+      } catch {
         reject(new Error("请求体不是合法 JSON"));
       }
     });
@@ -109,13 +110,12 @@ function handleLogin(req, res, body) {
 
   loginFailures.delete(key);
   const token = auth.createSession(user);
-  const session = auth.getSession(token);
   res.writeHead(200, {
     "Content-Type": "application/json; charset=utf-8",
     "Set-Cookie": auth.sessionCookie(token, Math.floor(auth.SESSION_TTL_MS / 1000)),
     "Cache-Control": "no-store"
   });
-  return res.end(JSON.stringify({ ok: true, user: session }));
+  return res.end(JSON.stringify({ ok: true, user: auth.publicUser(user) }));
 }
 
 function handleLogout(req, res) {
@@ -180,7 +180,7 @@ function handleQuiz(session, body) {
   if (!quiz || !quiz.items.length) return { status: 400, payload: { error: "该专题暂无可用题目" } };
 
   // 正确答案与解析只留在服务端会话里，浏览器拿到的是不含答案的题目。
-  session.quiz = quiz;
+  auth.setSessionQuiz(session.token, quiz);
 
   return {
     status: 200,
@@ -195,7 +195,7 @@ function handleQuiz(session, body) {
 }
 
 function handleCheck(session, body) {
-  const quiz = session.quiz;
+  const quiz = auth.getSessionQuiz(session.token);
   if (!quiz) return { status: 400, payload: { error: "当前没有进行中的练习" } };
 
   const index = Number(body.index);
@@ -333,7 +333,7 @@ function serveStatic(req, res, pathname) {
   let relative;
   try {
     relative = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
-  } catch (error) {
+  } catch {
     return sendJson(res, 400, { error: "请求路径编码不合法" });
   }
 
@@ -372,6 +372,31 @@ const server = http.createServer((req, res) => {
   return serveStatic(req, res, pathname);
 });
 
+// 启动即把「数据放哪、会话怎么存、有没有默认密码」打到日志里，
+// 这三项是网页版部署最容易漏且出事后最难查的地方。
+function logDeploymentDiagnostics() {
+  const store = auth.sessionStoreInfo();
+
+  console.log(`运行数据目录: ${store.dataDir}`);
+  if (!ensureWritable(store.dataDir)) {
+    console.warn("  [告警] 目录不可写：上传规则、学员作业与登录会话都会存不住。请用 TUTTI_DATA_DIR 指向可写目录。");
+  } else if (isInsideAppDir(store.dataDir)) {
+    console.warn("  [告警] 目录在应用目录内：重新发布时数据会被一并覆盖。请用 TUTTI_DATA_DIR 指向持久化目录。");
+  }
+
+  console.log(
+    store.store === "file"
+      ? `会话存储: 文件（${store.dir}），重启不掉线`
+      : "会话存储: 进程内存，重启即全员掉线（TUTTI_SESSION_STORE=file 可改为落盘）"
+  );
+
+  const defaultPasswordUsers = auth.findUsersWithDefaultPassword();
+  if (defaultPasswordUsers.length) {
+    console.warn(`[安全告警] 以下账号仍在使用默认密码：${defaultPasswordUsers.join("、")}`);
+    console.warn("  处理：node scripts/manage-accounts.cjs passwd <账号> --random，再重跑 node scripts/build-web-bundle.cjs 并重新发布。");
+  }
+}
+
 function startServer(options = {}) {
   return new Promise(resolve => {
     const listener = server.listen(options.port || PORT, options.host || HOST, () => resolve(listener));
@@ -382,6 +407,8 @@ if (require.main === module) {
   startServer().then(listener => {
     console.log(`刷题助手网页版已启动: http://localhost:${listener.address().port}`);
     console.log(`课程: ${banks.catalog.map(course => `${course.id}(${course.questionTotal})`).join("  ")}`);
+    console.log("");
+    logDeploymentDiagnostics();
   });
 }
 

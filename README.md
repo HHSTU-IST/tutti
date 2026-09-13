@@ -34,19 +34,35 @@ node scripts/manage-accounts.cjs init
 
 # 3) 启动（无第三方依赖，不需要 npm install）
 PORT=3000 HOST=0.0.0.0 node web/server.js
+# 有持久化目录的机器上，让它把会话/规则/作业都落到那里，别留在随发布覆盖的 web/data：
+# TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
 ```
 
 - **单机 / 容器**：任何能跑 Node 的主机起这一个进程，前面挂 Nginx 做 HTTPS 与反向代理即可。
 - **WorkBuddy「发布为应用」**：目录选 `web/`，语言 `node`，启动命令 `node server.js`。注意发布只上传该目录，所以**必须先跑构建脚本**生成自包含数据；服务需监听 `PORT` 并绑定 `0.0.0.0`（已默认如此）。
+- **运行期环境变量**：除 `PORT` / `HOST` 外还有三个与数据落盘相关的变量。
+
+  | 变量               | 默认值                    | 作用                                             |
+  | ------------------ | ------------------------- | ------------------------------------------------ |
+  | `TUTTI_DATA_DIR`   | `web/data`                | 运行数据目录：会话、上传规则、学员作业都落这里   |
+  | `TUTTI_SESSION_STORE` | `file`                 | `file` 落盘（重启不掉线）/ `memory` 纯进程内存   |
+  | `TUTTI_SESSION_DIR` | `<TUTTI_DATA_DIR>/sessions` | 单独指定会话目录，一般不用改                   |
+
+  有持久卷的机器上指向它即可，发布前后各跑一次自检：
+
+  ```bash
+  TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
+  node scripts/web-deploy-check.cjs
+  ```
 
 当前线上地址：<https://tutti-quiz-web2.app.workbuddy.host/>（在「设置—数据管理—应用」中管理）。历史链接 `tutti-quiz-web.app.workbuddy.link` 已下线失效。
 
-网页版部署清单：
+网页版部署清单（`node scripts/web-deploy-check.cjs` 逐项自检，退出码非 0 即还有未通过项）：
 
-- [ ] 改掉默认密码 `admin2026` / `demo2026`（`node scripts/manage-accounts.cjs passwd <账号> <新密码>`）
+- [x] 默认密码不再硬编码：`init` 生成的密码是随机的（也可用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定），已上线的存量账号由自检脚本复核是否还在用 `admin2026` / `demo2026`
 - [x] `data/accounts.json` 与 `web/data/accounts.json` 已 `git rm --cached` 并写入 `.gitignore`，账号盐值与哈希不再进公开仓库
-- [ ] 会话存在进程内存，重启会掉线；多实例部署要换成共享存储
-- [ ] `web/data/uploads/` 与 `web/data/upload-rules.json` 需要持久化，否则管理员设的上传规则会丢
+- [x] 会话默认落盘：一个会话一个 JSON 文件，放在 `TUTTI_DATA_DIR/sessions/`，重启不掉线；多实例把 `TUTTI_DATA_DIR` 指向同一持久化目录即共用会话（见「已知限制」）
+- [ ] `web/data/uploads/` 与 `web/data/upload-rules.json` 需要持久化：把 `TUTTI_DATA_DIR` 指向平台的持久化目录即可，未指向时启动会打印告警、自检显示待处理
 
 **回滚**：重新发布旧版 `web/` 目录即可回退代码；数据回滚先恢复 `data/accounts.json` 备份，再重跑 `node scripts/build-web-bundle.cjs`。
 
@@ -146,8 +162,9 @@ hh-tutor/
 网页版把同一套 `data/topic-*.ts` 题库发布到浏览器，**题库权限由账号决定**：已付费课程可选，未付费课程不可选，管理员账号可进入全部题库。
 
 ```bash
-node web/server.js            # 默认 http://localhost:3000
-PORT=8080 node web/server.js  # 换端口；HOST 可改绑定地址
+node web/server.js                          # 默认 http://localhost:3000
+PORT=8080 node web/server.js                # 换端口；HOST 可改绑定地址
+TUTTI_DATA_DIR=/var/lib/tutti node web/server.js   # 运行数据（会话/规则/作业）放到持久化目录
 ```
 
 零第三方依赖，只用 Node 内置模块。运行期读的是 `web/data` 下的 JSON 构建产物，**不要求高版本 Node**；只有 `scripts/build-web-bundle.cjs` 生成产物时需要 Node ≥ 22.6（它要直接读 TypeScript 题库）。
@@ -168,7 +185,7 @@ PORT=8080 node web/server.js  # 换端口；HOST 可改绑定地址
 - **命名说明**：不匹配时提示给学员的文字
 - **大小上限**：单文件 MB 数，上限 200 MB
 
-规则存在 `web/data/upload-rules.json`（首次运行用内置默认值）。**读取所有人都可以，修改只有管理员**：
+规则存在 `${TUTTI_DATA_DIR}/upload-rules.json`（默认 `web/data/upload-rules.json`，首次运行用内置默认值）。**读取所有人都可以，修改只有管理员**：
 
 ```text
 GET  /api/settings/upload   # 登录即可读，返回 canEdit 标记
@@ -177,17 +194,18 @@ POST /api/upload            # { courseId, fileName, contentBase64 }，校验格�
 GET  /api/uploads           # 自己的上传记录；管理员看全部
 ```
 
-管理员在网页端「上传规则设置」面板里改，保存后对后续上传立即生效。前端只负责展示，真正的校验始终在服务端——改前端 JS 绕不过。上传文件落在 `web/data/uploads/`，记录在同目录 `index.json`。
+管理员在网页端「上传规则设置」面板里改，保存后对后续上传立即生效。前端只负责展示，真正的校验始终在服务端——改前端 JS 绕不过。上传文件落在 `${TUTTI_DATA_DIR}/uploads/`（默认 `web/data/uploads/`），记录在同目录 `index.json`。
 
 文件名还会挡掉 `../` 这类路径穿越写法，落盘时再按时间戳加随机前缀重命名，避免覆盖。
 
 ### 已知限制
 
-- **会话存内存**：单进程 `Map`，重启即全员掉线，多实例不共享（要上多实例得换 Redis 之类共享存储）。
-- **上传文件落磁盘**：`web/data/uploads/`（作业）与 `web/data/upload-rules.json`（管理员规则）需持久化挂载，否则平台重启会丢。
-- **上传暂无删除接口**：管理端目前只能经 `/api/uploads` 查看；删文件需手动清理 `web/data/uploads/`（连同同目录 `index.json` 里的记录）。
+- **会话默认落盘**：一个会话一个 JSON 文件，放在 `${TUTTI_DATA_DIR}/sessions/`，进程重启不掉线。多实例把 `TUTTI_DATA_DIR` 指向同一持久化目录即共用会话，注销立即生效；目录本身不共享时得自己接 Redis 之类共享存储，或设 `TUTTI_SESSION_STORE=memory` 退回单进程内存（重启掉线）。
+- **进行中的练习只在内存**：组卷结果（含答案）不落盘，重启后重新组卷即可，已答题目与错题记录以浏览器端为准。
+- **上传文件落磁盘**：作业在 `${TUTTI_DATA_DIR}/uploads/`、管理员规则在 `${TUTTI_DATA_DIR}/upload-rules.json`，默认落在 `web/data`——该目录随发布一起被覆盖，线上必须把 `TUTTI_DATA_DIR` 指到持久化目录，否则平台重启或重新发布后规则与作业会丢。
+- **上传暂无删除接口**：管理端目前只能经 `/api/uploads` 查看；删文件需手动清理 `${TUTTI_DATA_DIR}/uploads/`（连同同目录 `index.json` 里的记录）。
 - **题型仅单/判/填**：判题引擎与构建脚本只覆盖这三种，新增题型需同时改 `services/quiz-engine.ts`、`web/lib/engine.cjs` 与 `scripts/build-web-bundle.cjs`。
-- **备份**：定期备份 `data/accounts.json`（账号与课程权限）和 `web/data/uploads/`（作业文件）。
+- **备份**：定期备份 `data/accounts.json`（账号与课程权限）与整个 `TUTTI_DATA_DIR`（会话、上传规则、作业文件）。
 
 ### 账号管理
 
@@ -200,10 +218,11 @@ node scripts/manage-accounts.cjs add 张三 pwd1234 --courses py,ml        # 新
 node scripts/manage-accounts.cjs add kefu pwd1234 --role admin          # 新增管理员
 node scripts/manage-accounts.cjs courses 张三 py,ml,al                  # 调整已购课程
 node scripts/manage-accounts.cjs passwd 张三 newpwd                     # 改密码
+node scripts/manage-accounts.cjs passwd admin --random                  # 随机生成强密码，只打印一次
 node scripts/manage-accounts.cjs remove 张三                            # 删除
 ```
 
-默认账号（**上线前必须改密码**）：`admin / admin2026`（管理员，全部题库）、`demo / demo2026`（仅 `py`）。
+`init` 建的两个账号是 `admin`（管理员，全部题库）与 `demo`（仅 `py`）。密码不再是固定的 `admin2026` / `demo2026`：默认随机生成并在 `init` 时打印一次，也可以在 `init` 前用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定。存量账号是否还在用老默认密码，用 `node scripts/web-deploy-check.cjs` 复核。
 
 > 账号真源是 `data/accounts.json`，CLI 只改这一处；改完后重跑 `node scripts/build-web-bundle.cjs` 同步到 `web/data/accounts.json`，再重新发布才在线上生效（发布沙箱只上传 `web/`）。
 
@@ -225,12 +244,13 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 ### 网页端测试
 
 ```bash
-node --test scripts/web-api.test.cjs
+node scripts/web-deploy-check.cjs      # 部署自检：默认密码 / 账号表同步 / 会话存储 / 数据目录
+node --test scripts/web-api.test.cjs scripts/web-security.test.cjs scripts/web-deploy.test.cjs
 ```
 
-测试会临时起服务、用临时账号表（通过 `TUTTI_ACCOUNTS_PATH` 指向），不读写真实的 `data/accounts.json`。
+测试会临时起服务，并把会话、上传规则、作业文件全部指向临时目录（`TUTTI_DATA_DIR`、`TUTTI_ACCOUNTS_PATH`），不读写仓库里的真实数据，多个测试文件并行也不会互踩。
 
-> 注意：会话存在进程内存里，重启服务后所有登录态失效。多实例部署需要把会话换成共享存储（Redis 等）。
+> 会话默认落盘到 `${TUTTI_DATA_DIR}/sessions/`，重启服务不会掉线；只有显式设 `TUTTI_SESSION_STORE=memory` 才是「重启即全员掉线」的旧行为。
 
 ## 微信登录授权接口
 

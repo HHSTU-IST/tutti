@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const crypto = require("crypto");
 const path = require("path");
 
 // 账号表的唯一真源是仓库根目录 data/accounts.json；构建脚本 build-web-bundle.cjs
@@ -9,17 +10,30 @@ process.env.TUTTI_ACCOUNTS_PATH = path.join(__dirname, "../data/accounts.json");
 
 const auth = require("../web/lib/auth.cjs");
 
-const DEFAULT_ACCOUNTS = [
-  { username: "admin", password: "admin2026", role: "admin", courses: [] },
-  { username: "demo", password: "demo2026", role: "user", courses: ["py"] }
+// 初始化时的账号种子。密码从环境变量取，取不到就现场随机生成并只打印一次——
+// 这里曾经写死 admin2026 / demo2026，是上线必改项，现在源码里不再有可用口令。
+const DEFAULT_ACCOUNT_SEEDS = [
+  { username: "admin", role: "admin", courses: [], passwordEnv: "TUTTI_ADMIN_PASSWORD" },
+  { username: "demo", role: "user", courses: ["py"], passwordEnv: "TUTTI_DEMO_PASSWORD" }
 ];
+
+// 去掉易混淆字符（0/O、1/l/I），方便转抄。
+const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+function randomPassword(length = 16) {
+  const bytes = crypto.randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i += 1) out += PASSWORD_ALPHABET[bytes[i] % PASSWORD_ALPHABET.length];
+  return out;
+}
 
 function usage() {
   console.log(`账号管理（网页端刷题助手）
 
 用法:
   node scripts/manage-accounts.cjs init
-      首次初始化：若无账号则写入默认管理员 admin 与普通账号 demo。
+      首次初始化：若无账号则写入管理员 admin 与普通账号 demo。
+      密码取 TUTTI_ADMIN_PASSWORD / TUTTI_DEMO_PASSWORD；未设置则随机生成并打印一次。
 
   node scripts/manage-accounts.cjs list
       列出全部账号（不输出密码）。
@@ -30,8 +44,8 @@ function usage() {
   node scripts/manage-accounts.cjs courses <用户名> <课程列表>
       设置已购课程，逗号分隔，例如 py,ml。留空表示全部收回。
 
-  node scripts/manage-accounts.cjs passwd <用户名> <新密码>
-      修改密码。
+  node scripts/manage-accounts.cjs passwd <用户名> <新密码|--random>
+      修改密码；传 --random 或不传密码则随机生成一个强密码并打印一次。
 
   node scripts/manage-accounts.cjs remove <用户名>
       删除账号。
@@ -87,13 +101,19 @@ function main() {
       console.log(`已有 ${accounts.users.length} 个账号，跳过初始化。`);
       return;
     }
-    save(DEFAULT_ACCOUNTS.map(item => createUser(item.username, item.password, item.role, item.courses)));
-    console.log("已写入默认账号：");
-    DEFAULT_ACCOUNTS.forEach(item => {
-      const scope = item.role === "admin" ? "全部题库（管理员）" : (item.courses.join(", ") || "无");
-      console.log(`  ${item.username} / ${item.password}  [${item.role}]  ${scope}`);
+
+    const seeds = DEFAULT_ACCOUNT_SEEDS.map(seed => {
+      const fromEnv = String(process.env[seed.passwordEnv] || "").trim();
+      return Object.assign({}, seed, { password: fromEnv || randomPassword(), generated: !fromEnv });
     });
-    console.log("\n请尽快修改密码。");
+
+    save(seeds.map(item => createUser(item.username, item.password, item.role, item.courses)));
+    console.log("已写入账号（密码只在本次输出，请立即记录）：");
+    seeds.forEach(item => {
+      const scope = item.role === "admin" ? "全部题库（管理员）" : (item.courses.join(", ") || "无");
+      console.log(`  ${item.username} / ${item.password}  [${item.role}]  ${scope}${item.generated ? "" : "  （来自环境变量）"}`);
+    });
+    console.log("\n想自己指定密码，先设置 TUTTI_ADMIN_PASSWORD / TUTTI_DEMO_PASSWORD 再执行 init。");
     return;
   }
 
@@ -150,20 +170,24 @@ function main() {
   }
 
   if (command === "passwd") {
-    const [username, password] = rest;
+    const [username, requested] = rest;
     // 必须在 main() 已读入的 accounts.users 里定位，才能保证修改被 save 落盘；
     // auth.findUser 会重新读文件返回游离对象，改它不会写回。
     const user = accounts.users.find(item => item.username === String(username || "").trim()) || null;
-    if (!user || !password) {
+    if (!user) {
       usage();
       process.exitCode = 1;
       return;
     }
+
+    const generated = !requested || requested === "--random";
+    const password = generated ? randomPassword() : requested;
+
     user.salt = auth.generateSalt();
     user.hash = auth.hashPassword(password, user.salt);
     user.updatedAt = new Date().toISOString();
     save(accounts.users);
-    console.log(`已更新 ${username} 的密码。`);
+    console.log(generated ? `已更新 ${username} 的密码：${password}（只显示这一次，请立即记录）` : `已更新 ${username} 的密码。`);
     return;
   }
 
