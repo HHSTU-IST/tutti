@@ -28,6 +28,8 @@ fs.writeFileSync(
   })
 );
 process.env.TUTTI_ACCOUNTS_PATH = accountsPath;
+// 会话、上传规则、作业文件都固定在临时目录：测试不写仓库数据，多个测试文件并行也不会互踩。
+process.env.TUTTI_DATA_DIR = tempDir;
 process.env.TUTTI_RULES_PATH = path.join(tempDir, "upload-rules.json");
 process.env.TUTTI_UPLOADS_DIR = path.join(tempDir, "uploads");
 

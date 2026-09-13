@@ -1,7 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 
-const DATA_DIR = path.join(__dirname, "../data");
+const { DATA_DIR } = require("./data-dir.cjs");
+
+// 规则文件与作业文件都落在运行数据目录里：部署时把 TUTTI_DATA_DIR 指到持久卷，
+// 管理员设的上传规则和学员作业就不会随重新发布一起丢。
 const RULES_PATH = process.env.TUTTI_RULES_PATH || path.join(DATA_DIR, "upload-rules.json");
 const UPLOADS_DIR = process.env.TUTTI_UPLOADS_DIR || path.join(DATA_DIR, "uploads");
 const INDEX_PATH = () => path.join(UPLOADS_DIR, "index.json");
@@ -21,7 +24,7 @@ function readRules() {
 
   try {
     return normalizeRules(JSON.parse(fs.readFileSync(RULES_PATH, "utf8")));
-  } catch (error) {
+  } catch {
     // 规则文件损坏时退回默认值，避免整个上传功能不可用。
     return Object.assign({}, DEFAULT_RULES);
   }
@@ -105,7 +108,7 @@ function readIndex() {
   try {
     const parsed = JSON.parse(fs.readFileSync(INDEX_PATH(), "utf8"));
     return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -146,6 +149,7 @@ function listUploads({ username, isAdmin }) {
 
 module.exports = {
   DEFAULT_RULES,
+  RULES_PATH,
   UPLOADS_DIR,
   checkFile,
   describeRules,
