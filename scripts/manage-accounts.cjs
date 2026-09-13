@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+const path = require("path");
+
+// 账号表的唯一真源是仓库根目录 data/accounts.json；构建脚本 build-web-bundle.cjs
+// 再把它拷到 web/data/accounts.json 供发布沙箱读取。若走 auth.cjs 的自动解析，
+// web/data/accounts.json 一旦存在就会写入发布副本，下次构建又被 data/accounts.json
+// 覆盖，导致用本脚本改的账号/密码静默丢失。这里强制锁定真源。
+process.env.TUTTI_ACCOUNTS_PATH = path.join(__dirname, "../data/accounts.json");
+
 const auth = require("../web/lib/auth.cjs");
 
 const DEFAULT_ACCOUNTS = [
