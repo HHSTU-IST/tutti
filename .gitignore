@@ -35,3 +35,4 @@ web/data/accounts.json
 web/data/upload-rules.json
 web/data/uploads/
 web/data/sessions/
+web/data/runtime-state.json

@@ -78,19 +78,31 @@ function checkDataDir() {
   const writable = ensureWritable(DATA_DIR);
   const inside = isInsideAppDir(DATA_DIR);
 
-  report(
-    writable && !inside,
-    "运行数据已持久化",
-    !writable
-      ? `数据目录不可写：${DATA_DIR}\n用 TUTTI_DATA_DIR 指向平台提供的可写持久化目录`
-      : inside
-        ? `数据目录在应用目录内：${DATA_DIR}\n重新发布会连登录会话、上传规则与学员作业一起覆盖，用 TUTTI_DATA_DIR 指向持久化目录`
-        : `数据目录：${DATA_DIR}\n上传规则：${uploadRules.RULES_PATH}\n学员作业：${uploadRules.UPLOADS_DIR}`
-  );
+  if (writable && !inside) {
+    report(
+      true,
+      "运行数据已持久化",
+      `数据目录：${DATA_DIR}\n上传规则：${uploadRules.RULES_PATH}\n学员作业：${uploadRules.UPLOADS_DIR}`
+    );
+    return;
+  }
+
+  const detail = !writable
+    ? `数据目录不可写：${DATA_DIR}\n用 TUTTI_DATA_DIR 指向平台提供的可写持久化目录`
+    : `数据目录在应用目录内：${DATA_DIR}\n重新发布会连登录会话、上传规则与学员作业一起覆盖，用 TUTTI_DATA_DIR 指向持久化目录`;
+
+  // 平台重建目录这件事只能在发布后用 /api/health 实测（boots/firstBootAt），
+  // 所以发布脚本可以显式声明「先发布、再复核」，把它降级成提示。
+  if (process.env.TUTTI_ALLOW_UNPERSISTED_DATA === "1") {
+    reporter.hint("运行数据已持久化", `${detail}\n（TUTTI_ALLOW_UNPERSISTED_DATA=1：允许先发布，发布后按 README 用 /api/health 复核）`);
+    return;
+  }
+
+  report(false, "运行数据已持久化", detail);
 }
 
 function main() {
-  console.log("网页版部署自检（对应 README「网页版部署清单」）\n");
+  console.log("网页版部署自检（对应 docs/development.md 的「部署清单 · 网页版」）\n");
 
   checkAccounts();
   checkSessionStore();
