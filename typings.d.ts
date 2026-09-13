@@ -112,6 +112,13 @@ declare namespace wx {
   namespace cloud {
     function init(options?: { env?: string; traceUser?: boolean }): void;
     function database(): CloudDatabase;
+    /** 调云函数：登录用（getWXContext 取 openid），返回值在 success 的 result 里。 */
+    function callFunction(options: {
+      name: string;
+      data?: unknown;
+      success?(response: { result?: unknown; errMsg: string }): void;
+      fail?(error: GeneralCallbackResult): void;
+    }): void;
   }
 
   interface CloudDatabase {

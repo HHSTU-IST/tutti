@@ -27,7 +27,9 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
   - [x] 导出错题本
 - 授权
   - [x] 根据后台购买结果加载题库
-  - [x] 全部课程内置同一小程序，已购课程可选、未购课程不可选
+  - [x] 全部课程内置同一小程序
+    - 已购课程可选
+    - 未购课程不可选
 
 ### 已支持课程
 
@@ -38,6 +40,8 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 - [ ] `dl`：深度学习
 
 全部课程题库都编译进同一个小程序，未开通的课程置灰不可进入。新增课程要同步改哪三处，见 [docs/development.md](docs/development.md) 的「新增一门课程」。
+
+![miniprogram](assets/miniprog.png)
 
 ## 使用说明
 
@@ -52,7 +56,7 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 1. 用 `admin` 账号登录网页版，**全部题库自动解锁**（普通账号只能进已登记的课程）。
 2. **开通课程**：`node scripts/manage-accounts.cjs courses <账号> py,ml` 调整该账号的已购课程（完整 CLI 见 [docs/development.md](docs/development.md) 的「账号管理」）。
 3. **上传规则**：课程页底部「上传规则设置」面板改允许格式、文件名正则、命名说明、大小上限，保存后对所有学员的后续上传立即生效。格式与命名的校验在服务端，改前端绕不过。
-4. 小程序的课程开通走另一套：由后台在 `agents` 里对应用户返回 `true`，不需要在网页端操作。
+4. 小程序的课程开通走云开发那一套：在云开发控制台的 `user_profiles` 里把该用户文档的 `agents.<课程>` 改成 `true`，学员重新登录后生效（不需要在网页端操作）。
 
 ## 文档与目录
 
@@ -64,6 +68,7 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 | `outputs/`                                 | 试卷脚本的生成物（`.md` / `.docx`）                                                                                                                                                                                      |
 
 ```text
+├── cloudfunctions/ # 云函数：login（取 openid + 返回课程开通）
 ├── data/       # 题库 data/topic-*.ts、本地测试开关、网页端账号表
 ├── docs/       # development.md、design.md
 ├── outputs/    # 试卷脚本的生成物
@@ -129,8 +134,8 @@ node scripts/web-deploy-check.cjs
 
 1. 用**微信开发者工具**（稳定版）导入仓库根目录；`project.config.json` 里的 `appid` 目前是 `wxf7f1812c7c4f4106`，换成自己的需在微信公众平台注册后修改该字段。
 2. **本地调试**：把 `data/access.ts` 里要测的课程置为 `true`，开发者工具扫码登录即可进入（详见 [docs/development.md](docs/development.md) 的「扫码测试登录」）。
-3. **接后台授权**：填 `services/runtime-config.ts` 中 `PRODUCTION_RUNTIME_CONFIG.wechatLoginApiUrl`（必须 HTTPS）。**当前为空，不填线上会白屏**——这是发布前最容易被漏掉的一项；启动时 `console.error` 会打印缺哪一项，首页也会显示「生产配置缺失」。
-4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。`app.ts` 的 `wx.cloud.init()` 默认走默认环境；多环境部署时在 `services/runtime-config.ts` 填 `cloudEnv` 指定环境 ID（留空时启动会 `console.warn` 提示）。云数据库读写失败时答题页会降级为本地使用并弹 toast，不会白屏。
+3. **登录云函数**：仓库已带 `cloudfunctions/login`——它用 `cloud.getWXContext()` 直接取 openid，**不需要自建后台、不需要 AppSecret 与备案域名**。开发者工具里右键 `cloudfunctions/login` →「上传并部署：云端安装依赖」即可；函数名在 `services/runtime-config.ts` 的 `loginFunctionName`（默认 `login`）。没上传或云环境没建好时，首页会直接显示失败原因，不会白屏。
+4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。默认环境即可（多环境时在 `services/runtime-config.ts` 填 `cloudEnv` 指定环境 ID，留空时启动会 `console.warn` 提示）。**开通课程**：在云开发控制台把该学员文档的 `agents.<课程>` 改成 `true`，学员重新登录后生效。云数据库读写失败时答题页会降级为本地使用并弹 toast，不会白屏。
 5. **发布**：开发者工具右上角「上传」填版本号 → 微信公众平台「版本管理」提交审核 → 审核通过点「发布」。体验版（`envVersion=trial`）与正式版走同一套生产配置，可先拿它做真机验证。
 
 **发布前自检**：逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/miniprogram-release-check.cjs` 自检，退出码非 0 即还有未通过项；`[手工]` 项脚本判不了，需人工确认）。

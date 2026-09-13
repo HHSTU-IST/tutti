@@ -1,5 +1,6 @@
 export interface RuntimeConfig {
-  wechatLoginApiUrl: string;
+  /** 登录云函数名：生产用 wx.cloud.callFunction 取 openid，不需要自建后台，也不需要备案域名。 */
+  loginFunctionName: string;
   enableLocalWechatTestLogin: boolean;
   enableCloudDatabase: boolean;
   /** 微信云开发环境 ID；留空走默认环境，多环境部署时填入以免连错云数据库。 */
@@ -7,15 +8,16 @@ export interface RuntimeConfig {
 }
 
 const DEVELOPMENT_RUNTIME_CONFIG: RuntimeConfig = {
-  wechatLoginApiUrl: "",
+  loginFunctionName: "login",
   enableLocalWechatTestLogin: true,
   enableCloudDatabase: false,
   cloudEnv: ""
 };
 
 const PRODUCTION_RUNTIME_CONFIG: RuntimeConfig = {
-  // 发布前必须填 wechatLoginApiUrl（HTTPS），否则生产环境无法完成微信登录授权。
-  wechatLoginApiUrl: "",
+  // 登录与开通都走云开发：cloudfunctions/login 用 getWXContext() 取 openid，
+  // 再按 user_profiles 里该用户的 agents 返回开通情况（管理员在云开发控制台把对应课程置 true）。
+  loginFunctionName: "login",
   enableLocalWechatTestLogin: false,
   enableCloudDatabase: true,
   // 多环境时填入云开发环境 ID；留空走默认环境。
@@ -42,16 +44,21 @@ export const RUNTIME_CONFIG = IS_PRODUCTION_RUNTIME
 
 /**
  * 生产配置缺失必需项时返回缺失项清单，供启动时告警（开发环境始终返回空数组）。
- * wechatLoginApiUrl 是硬性必需项：为空时生产环境拿不到会话，首页所有课程置灰。
+ * 这三项任一不对，线上都拿不到会话：云函数与云数据库都要靠 enableCloudDatabase 初始化，
+ * 本地测试授权开着则等于绕过付费。
  */
 export function findMissingProductionConfig(): string[] {
   if (!IS_PRODUCTION_RUNTIME) return [];
 
   const missing: string[] = [];
-  if (!RUNTIME_CONFIG.wechatLoginApiUrl) {
-    missing.push("wechatLoginApiUrl（生产登录授权接口，必须填写）");
-  } else if (!/^https:\/\//i.test(RUNTIME_CONFIG.wechatLoginApiUrl)) {
-    missing.push("wechatLoginApiUrl（必须为 HTTPS）");
+  if (!RUNTIME_CONFIG.loginFunctionName) {
+    missing.push("loginFunctionName（登录云函数名，必须填写）");
+  }
+  if (!RUNTIME_CONFIG.enableCloudDatabase) {
+    missing.push("enableCloudDatabase（云函数与云数据库都靠它初始化，生产必须为 true）");
+  }
+  if (RUNTIME_CONFIG.enableLocalWechatTestLogin) {
+    missing.push("enableLocalWechatTestLogin（生产必须为 false，否则等于绕过付费）");
   }
   return missing;
 }

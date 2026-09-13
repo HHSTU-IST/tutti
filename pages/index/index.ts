@@ -1,5 +1,5 @@
 import { formatRuntimePlatform, getRuntimeDeviceInfo, resolveDeviceInfo } from "../../services/device";
-import { UserSession, resolveUserSession, restoreUserSession } from "../../services/purchase";
+import { UserSession, getLastLoginFailure, resolveUserSession, restoreUserSession } from "../../services/purchase";
 import { CourseOption, listAgentCourses } from "../../services/registry";
 import { MISSING_CONFIG_MESSAGE, hasMissingProductionConfig } from "../../services/runtime-config";
 
@@ -134,8 +134,9 @@ function maskWechatId(openId: string): string {
   return `${openId.slice(0, 4)}****${openId.slice(-4)}`;
 }
 
-// 生产配置没填全时，真机上看到的「未读取到可用授权」会被误判成后台故障，
-// 这里换成指向配置的提示；具体缺哪项由 app.ts 打到开发者工具 console。
+// 生产配置没填全、或登录云函数调用失败时，真机上看到的「未读取到可用授权」会被误判成故障，
+// 这里换成能直接指向原因的话；具体缺哪项由 app.ts 与 purchase.ts 打到开发者工具 console。
 function buildDeniedStatusText(): string {
-  return hasMissingProductionConfig() ? MISSING_CONFIG_MESSAGE : "未读取到可用授权";
+  if (hasMissingProductionConfig()) return MISSING_CONFIG_MESSAGE;
+  return getLastLoginFailure() || "未读取到可用授权";
 }

@@ -21,6 +21,8 @@ const LOCAL_TEST_OPEN_ID_PREFIX = "test-openid-";
 // This file only supplies the agent key list; runtime defaults still start as false.
 const DEFAULT_AGENT_ACCESS = require("../data/access") as AgentAccessMap;
 
+let lastLoginFailure = "";
+
 export function getDefaultAgentAccess(): AgentAccessMap {
   return Object.keys(DEFAULT_AGENT_ACCESS).reduce<AgentAccessMap>((result, key) => {
     result[key] = false;
@@ -29,21 +31,23 @@ export function getDefaultAgentAccess(): AgentAccessMap {
 }
 
 export function resolveUserSession(availableAgents?: AgentKind[]): Promise<UserSession | null> {
-  if (!RUNTIME_CONFIG.wechatLoginApiUrl && RUNTIME_CONFIG.enableLocalWechatTestLogin) {
+  // 开发配置：本地测试授权（生产配置里这个开关恒为 false，线上走不到这一支）。
+  if (RUNTIME_CONFIG.enableLocalWechatTestLogin) {
     return loginWithWechat()
       .then(code => createLocalTestSession(code))
       .catch(() => createLocalTestSession(""))
       .then(session => finalizeSession(session, availableAgents));
   }
 
-  if (!RUNTIME_CONFIG.wechatLoginApiUrl) {
-    return Promise.resolve(getCachedSession(availableAgents));
-  }
-
-  return loginWithWechat()
-    .then(code => requestLoginSession(code))
+  // 生产：login 云函数用 getWXContext() 拿 openid，再按 user_profiles.agents 判定开通情况。
+  return requestLoginSession()
     .then(session => finalizeSession(session, availableAgents))
     .catch(() => getCachedSession(availableAgents));
+}
+
+/** 最近一次登录云函数失败的原因：首页拿它给出比「未读取到可用授权」更有用的提示。 */
+export function getLastLoginFailure(): string {
+  return lastLoginFailure;
 }
 
 // 只读取本地缓存会话，供首页 onLoad 恢复已登录状态，不触发 wx.login。
@@ -69,23 +73,25 @@ function loginWithWechat(): Promise<string> {
   });
 }
 
-function requestLoginSession(code: string): Promise<Omit<UserSession, "agent">> {
+function requestLoginSession(): Promise<Omit<UserSession, "agent">> {
   return new Promise(resolve => {
-    wx.request<LoginResponse>({
-      url: RUNTIME_CONFIG.wechatLoginApiUrl,
-      method: "POST",
-      data: { code },
+    wx.cloud.callFunction({
+      name: RUNTIME_CONFIG.loginFunctionName,
       success(response) {
+        lastLoginFailure = "";
+        const data = (response && response.result ? response.result : {}) as LoginResponse;
         resolve({
-          agents: mergeAgentAccess(response.data && response.data.agents),
-          wechatOpenId: (response.data && (response.data.openId || response.data.wechatOpenId)) || ""
+          agents: mergeAgentAccess(data.agents),
+          wechatOpenId: data.openId || data.wechatOpenId || ""
         });
       },
       fail() {
-        resolve({
-          agents: getDefaultAgentAccess(),
-          wechatOpenId: ""
-        });
+        // 云函数没部署 / 云环境没初始化：退回本地缓存的会话，别把已登录的学员踢下线。
+        lastLoginFailure = `登录云函数（${RUNTIME_CONFIG.loginFunctionName}）调用失败：确认云开发里已上传 cloudfunctions/login`;
+        const cached = getCachedSession();
+        resolve(cached
+          ? { agents: cached.agents, wechatOpenId: cached.wechatOpenId }
+          : { agents: getDefaultAgentAccess(), wechatOpenId: "" });
       }
     });
   });

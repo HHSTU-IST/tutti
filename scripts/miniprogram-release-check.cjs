@@ -17,8 +17,11 @@ const PROJECT_CONFIG_PATH = path.join(APP_DIR, "project.config.json");
 const README_PATH = path.join(APP_DIR, "README.md");
 
 const USER_COLLECTION = "user_profiles";
+const CLOUD_FUNCTION_ROOT = "cloudfunctions";
+const LOGIN_FUNCTION_DIR = path.join(APP_DIR, CLOUD_FUNCTION_ROOT, "login");
 
 // 上传包里不该出现的目录与后缀（微信开发者工具按这个清单裁剪小程序上传包）。
+// 云函数走 cloudfunctionRoot 单独上传，也不该打进小程序包。
 const REQUIRED_IGNORES = [
   ["folder", "web"],
   ["folder", "scripts"],
@@ -26,6 +29,7 @@ const REQUIRED_IGNORES = [
   ["folder", "prompts"],
   ["folder", "templates"],
   ["folder", "outputs"],
+  ["folder", CLOUD_FUNCTION_ROOT],
   ["suffix", ".md"],
   ["suffix", ".cjs"],
   ["suffix", ".py"]
@@ -34,7 +38,8 @@ const REQUIRED_IGNORES = [
 const MANUAL_ITEMS = [
   "trial 体验版真机跑通：上传 → 公众平台设为体验版 → 真机把登录、进入题库、答题、错题本各点一遍再提审",
   "云开发控制台已建集合 user_profiles，权限设为「仅创建者可读写」",
-  "后台接口已能用 code 换 openid，并按用户购买情况返回 agents"
+  "cloudfunctions/login 已上传到云开发：开发者工具里右键该目录 →「上传并部署：云端安装依赖」",
+  "学员的开通情况已在 user_profiles 里置好：把该用户文档的 agents.<课程> 改成 true（改完让学员重新登录）"
 ];
 
 const reporter = createReporter({ manual: MANUAL_ITEMS });
@@ -81,25 +86,20 @@ function checkProductionConfig() {
     return;
   }
 
-  const url = String(config.wechatLoginApiUrl || "");
+  const functionName = String(config.loginFunctionName || "");
   report(
-    url ? "ok" : "fail",
-    "生产登录接口已填",
-    url
-      ? `wechatLoginApiUrl = ${url}`
-      : "PRODUCTION_RUNTIME_CONFIG.wechatLoginApiUrl 还是空的：线上会停在「生产配置缺失」，首页所有课程置灰"
+    functionName ? "ok" : "fail",
+    "登录云函数名已填",
+    functionName
+      ? `PRODUCTION_RUNTIME_CONFIG.loginFunctionName = ${functionName}`
+      : "loginFunctionName 为空：线上调不到登录云函数，首页所有课程置灰"
   );
-
-  if (url) {
-    const isHttps = /^https:\/\//i.test(url);
-    report(isHttps ? "ok" : "fail", "生产登录接口为 HTTPS", isHttps ? "满足小程序 request 合法域名要求" : `${url} 不是 HTTPS，小程序 request 域名必须是 HTTPS`);
-  }
 
   report(
     config.enableLocalWechatTestLogin === false ? "ok" : "fail",
     "生产不启用本地测试授权",
     config.enableLocalWechatTestLogin === false
-      ? "enableLocalWechatTestLogin = false，开通只看后台返回的 agents"
+      ? "enableLocalWechatTestLogin = false，开通只看云函数返回的 agents"
       : "enableLocalWechatTestLogin 不是 false：线上会走本地测试授权，等于绕过付费，必须改回 false"
   );
 
@@ -108,7 +108,7 @@ function checkProductionConfig() {
     "生产启用云数据库",
     config.enableCloudDatabase === true
       ? "enableCloudDatabase = true"
-      : "enableCloudDatabase 不是 true：答题统计与错题本不会同步到 user_profiles"
+      : "enableCloudDatabase 不是 true：登录云函数调不到，答题统计与错题本也不会同步到 user_profiles"
   );
 
   if (!config.cloudEnv) {
@@ -122,15 +122,16 @@ function checkProductionConfig() {
 
 function checkAuthorizationSource() {
   const purchase = readText(PURCHASE_PATH);
-  const hasBackendBranch = /requestLoginSession\s*\(/.test(purchase);
+  const usesCloudLogin = /wx\.cloud\.callFunction\s*\(/.test(purchase)
+    && /RUNTIME_CONFIG\.loginFunctionName/.test(purchase);
   const localBranchGuarded = /RUNTIME_CONFIG\.enableLocalWechatTestLogin/.test(purchase);
 
   report(
-    hasBackendBranch && localBranchGuarded ? "ok" : "fail",
-    "生产授权走后台接口",
-    hasBackendBranch && localBranchGuarded
-      ? "services/purchase.ts 的生产分支请求 wechatLoginApiUrl，本地测试分支被 enableLocalWechatTestLogin 开关包住"
-      : "purchase.ts 里没看到 requestLoginSession，或被开关约束的本地测试分支，生产开通来源无法确认"
+    usesCloudLogin && localBranchGuarded ? "ok" : "fail",
+    "生产授权走登录云函数",
+    usesCloudLogin && localBranchGuarded
+      ? "services/purchase.ts 的生产分支调 loginFunctionName 指定的云函数，本地测试分支被 enableLocalWechatTestLogin 开关包住"
+      : "purchase.ts 里没看到 wx.cloud.callFunction 调 loginFunctionName，或被开关约束的本地测试分支，生产开通来源无法确认"
   );
 
   const enabled = Array.from(readText(ACCESS_PATH).matchAll(/^\s*(\w+):\s*true/gm), match => match[1]);
@@ -140,6 +141,39 @@ function checkAuthorizationSource() {
     enabled.length
       ? `当前置为 true 的课程：${enabled.join("、")}。只在开发配置生效，生产由后台 agents 决定，不需要清空`
       : "没有课程被置为 true"
+  );
+}
+
+function checkCloudFunction() {
+  const loginIndex = path.join(LOGIN_FUNCTION_DIR, "index.js");
+  const loginPackage = path.join(LOGIN_FUNCTION_DIR, "package.json");
+  const hasIndex = fs.existsSync(loginIndex);
+  const hasPackage = fs.existsSync(loginPackage);
+
+  report(
+    hasIndex && hasPackage ? "ok" : "fail",
+    "登录云函数已入库",
+    hasIndex && hasPackage
+      ? `${CLOUD_FUNCTION_ROOT}/login 有 index.js 与 package.json，上传时选「云端安装依赖」`
+      : `缺少 ${path.relative(APP_DIR, hasIndex ? loginPackage : loginIndex)}：云函数要在仓库里维护，才能在开发者工具里右键上传`
+  );
+
+  const usesWxContext = hasIndex && /getWXContext\s*\(/.test(readText(loginIndex));
+  report(
+    usesWxContext ? "ok" : "fail",
+    "云函数用 getWXContext 取 openid",
+    usesWxContext
+      ? "cloudfunctions/login 用 cloud.getWXContext() 拿调用者 openid，不需要 AppSecret"
+      : "cloudfunctions/login 里没看到 getWXContext()，这样拿不到调用者 openid"
+  );
+
+  const cloudRoot = String((readJson(PROJECT_CONFIG_PATH) || {}).cloudfunctionRoot || "");
+  report(
+    cloudRoot.replace(/\/+$/, "") === CLOUD_FUNCTION_ROOT ? "ok" : "fail",
+    "工程已声明 cloudfunctionRoot",
+    cloudRoot
+      ? `project.config.json 的 cloudfunctionRoot = ${cloudRoot}`
+      : "project.config.json 里没有 cloudfunctionRoot：开发者工具不会把 cloudfunctions/ 认成云函数目录"
   );
 }
 
@@ -209,6 +243,7 @@ function runAllChecks() {
   reporter.results.length = 0;
   checkProductionConfig();
   checkAuthorizationSource();
+  checkCloudFunction();
   checkCloudDatabase();
   checkProject();
   return reporter.results;
