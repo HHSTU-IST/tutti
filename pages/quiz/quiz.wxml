@@ -74,7 +74,11 @@
     <view wx:elif="{{currentQuestion}}" class="question card">
       <view class="question-meta">{{currentQuestion.topicName}} · {{currentQuestion.typeName}} · {{currentQuestion.difficulty || '中'}}</view>
       <rich-text class="question-text" nodes="{{currentQuestion.question}}"></rich-text>
-      <view class="option-list">
+      <view wx:if="{{currentQuestion.type === 'fill'}}" class="fill-box">
+        <input class="fill-input" type="text" value="{{fillAnswer}}" bindinput="onFillInput" placeholder="请输入答案" disabled="{{answered}}" confirm-type="done" />
+        <button class="primary-btn fill-submit" bindtap="submitFillAnswer" disabled="{{answered}}">提交答案</button>
+      </view>
+      <view wx:else class="option-list">
         <button wx:for="{{currentQuestion.options}}" wx:key="value" class="{{item.buttonClass}}" data-value="{{item.value}}" bindtap="answerQuestion" disabled="{{answered}}">
           <view class="option-mark">{{item.value}}</view>
           <text class="option-text">{{item.text}}</text>

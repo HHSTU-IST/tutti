@@ -133,7 +133,7 @@ function normalizeText(value) {
 // 判题在服务端完成：填空比对文本，单选/判断比对选项值。
 function gradeAnswer(item, submitted) {
   if (item.type === "fill") {
-    const expected = (item.options[0] && item.options[0].text) || "";
+    const expected = String(item.correctAnswer || "");
     return {
       correct: normalizeText(submitted) === normalizeText(expected),
       correctText: expected,

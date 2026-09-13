@@ -59,9 +59,10 @@ interface QuizData {
   totalNum: number;
   rateText: string;
   currentQuestion: QuizQuestion | null;
-  selectedAnswer: AnswerValue | "";
+  selectedAnswer: string;
   selectedAction: string;
-  correctAnswer: AnswerValue | "";
+  correctAnswer: string;
+  fillAnswer: string;
   explanation: string;
   analysisClass: string;
   analysisTitle: string;
@@ -104,9 +105,16 @@ interface QuizPageInstance {
   showQuestion(currentQuestion: QuizQuestion, source?: RawQuestion): void;
   normalizeQuestion(question: RawQuestion, type: QuestionType, topicName: string): QuizQuestion;
   answerQuestion(event: MiniProgramTapEvent<{ value?: AnswerValue }>): void;
+  onFillInput(event: { detail: { value: string } }): void;
+  submitFillAnswer(): void;
+  gradeAnswer(selectedAnswer: string): void;
   persistQuizSnapshot(errorList: ErrorItem[], stats: AnswerStats): void;
   updateProgress(): void;
   updateComputedViewState(): void;
+}
+
+function normalizeAnswerText(value: string): string {
+  return String(value || "").trim().replace(/\s+/g, "").toLowerCase();
 }
 
 const DEFAULT_BANK: QuizBank = getAgentBank("py") || {};
@@ -132,6 +140,7 @@ Page<QuizData, QuizPageInstance>({
     selectedAnswer: "",
     selectedAction: "",
     correctAnswer: "",
+    fillAnswer: "",
     explanation: "",
     analysisClass: "analysis",
     analysisTitle: "",
@@ -249,6 +258,7 @@ Page<QuizData, QuizPageInstance>({
       currentQuestion: null,
       selectedAnswer: "",
       correctAnswer: "",
+      fillAnswer: "",
       explanation: "",
       analysisClass: "analysis",
       analysisTitle: "",
@@ -296,6 +306,7 @@ Page<QuizData, QuizPageInstance>({
       selectedAnswer: "",
       selectedAction: "",
       correctAnswer: "",
+      fillAnswer: "",
       explanation: "",
       analysisClass: "analysis",
       analysisTitle: "",
@@ -478,6 +489,7 @@ Page<QuizData, QuizPageInstance>({
     this.setData({
       currentQuestion,
       selectedAnswer: "",
+      fillAnswer: "",
       correctAnswer: currentQuestion.correctAnswer,
       explanation: formatExplain(source || currentQuestion.raw),
       analysisClass: "analysis",
@@ -494,13 +506,32 @@ Page<QuizData, QuizPageInstance>({
     return normalizeQuestion(question, type, topicName, topicKey);
   },
 
-  answerQuestion(event: MiniProgramTapEvent<{ value?: AnswerValue }>) {
-    if (this.data.answered || !this.data.currentQuestion) return;
+  onFillInput(event: { detail: { value: string } }) {
+    this.setData({ fillAnswer: event.detail.value });
+  },
 
+  submitFillAnswer() {
+    const selectedAnswer = this.data.fillAnswer.trim();
+    if (!selectedAnswer) {
+      wx.showToast({ title: "请先输入答案", icon: "none" });
+      return;
+    }
+    this.gradeAnswer(selectedAnswer);
+  },
+
+  answerQuestion(event: MiniProgramTapEvent<{ value?: AnswerValue }>) {
     const selectedAnswer = event.currentTarget.dataset.value;
     if (!selectedAnswer) return;
+    this.gradeAnswer(selectedAnswer);
+  },
 
-    const isCorrect = selectedAnswer === this.data.correctAnswer;
+  gradeAnswer(selectedAnswer: string) {
+    if (this.data.answered || !this.data.currentQuestion) return;
+
+    const isCorrect = this.data.currentQuestion.type === "fill"
+      ? normalizeAnswerText(selectedAnswer) === normalizeAnswerText(String(this.data.correctAnswer))
+      : selectedAnswer === this.data.correctAnswer;
+
     const rightNum = this.data.rightNum + (isCorrect ? 1 : 0);
     const wrongNum = this.data.wrongNum + (isCorrect ? 0 : 1);
     const totalNum = this.data.totalNum + 1;

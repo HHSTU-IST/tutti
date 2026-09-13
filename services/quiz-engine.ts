@@ -11,6 +11,10 @@ import type {
 
 const LETTERS: AnswerValue[] = ["A", "B", "C", "D", "E", "F"];
 
+function makeQuestionId(topic: string): string {
+  return `${topic}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function shuffle<T>(list: T[]): T[] {
   const result = list.slice();
   for (let index = result.length - 1; index > 0; index -= 1) {
@@ -68,7 +72,7 @@ export function normalizeQuestion(
     ];
 
     return {
-      id: `${topic}-${Date.now()}`,
+      id: makeQuestionId(topic),
       raw: question,
       topic,
       topicName,
@@ -83,7 +87,7 @@ export function normalizeQuestion(
 
   if (type === "fill") {
     return {
-      id: `${topic}-${Date.now()}`,
+      id: makeQuestionId(topic),
       raw: question,
       topic,
       topicName,
@@ -91,15 +95,8 @@ export function normalizeQuestion(
       typeName: "填空题",
       difficulty,
       question: question.question,
-      correctAnswer: "A",
-      options: [
-        {
-          value: "A",
-          text: String(question.answer),
-          isCorrect: true,
-          buttonClass: "option-btn"
-        }
-      ]
+      correctAnswer: String(question.answer),
+      options: []
     };
   }
 
@@ -113,7 +110,7 @@ export function normalizeQuestion(
   const correctAnswer = LETTERS[correctIndex] || "A";
 
   return {
-    id: `${topic}-${Date.now()}`,
+    id: makeQuestionId(topic),
     raw: question,
     topic,
     topicName,

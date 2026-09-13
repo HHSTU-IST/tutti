@@ -96,6 +96,6 @@ export interface QuizQuestion {
   typeName: string;
   difficulty?: DifficultyLevel;
   question: string;
-  correctAnswer: AnswerValue;
+  correctAnswer: AnswerValue | string;
   options: QuestionOption[];
 }
