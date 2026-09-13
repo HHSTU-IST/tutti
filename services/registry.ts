@@ -1,12 +1,12 @@
 import { AgentKind } from "./purchase";
-import { CourseInfo, QuizBank, TopicBank, TopicItem } from "../types/quiz-bank";
+import { BankConfig, QuizBank, TopicBank, TopicItem } from "../types/quiz-bank";
 
 const pyBank = require("../data/topic-py") as QuizBank;
 const mlBank = require("../data/topic-ml") as QuizBank;
 const alBank = require("../data/topic-al") as QuizBank;
 const cvBank = require("../data/topic-cv") as QuizBank;
 
-export interface AgentDefinition extends CourseInfo {
+export interface AgentDefinition {
   id: AgentKind;
   bank: QuizBank;
 }
@@ -18,69 +18,14 @@ export interface CourseOption {
   questionTotal: number;
 }
 
+// 注册表只回答「有哪些课程、各自对应哪个题库」。
+// 标题、专题顺序与专题名一律以题库 `data/topic-*.ts` 的 `_config` 为准，
+// 避免同一份元数据在小程序、网页端构建脚本里各存一份并逐渐漂移。
 export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
-  py: {
-    id: "py",
-    title: "Python 刷题助手",
-    bank: pyBank,
-    fallbackTopics: [
-      ["var", "变量"],
-      ["flow", "流程控制"],
-      ["func", "函数"],
-      ["oop", "面向对象"],
-      ["decorator", "装饰器"],
-      ["magic", "魔术方法"],
-      ["generator", "生成器"],
-      ["thread", "多线程"],
-      ["code", "代码题"]
-    ]
-  },
-  ml: {
-    id: "ml",
-    title: "机器学习刷题助手",
-    bank: mlBank,
-    fallbackTopics: [
-      ["base", "基础"],
-      ["reg", "回归"],
-      ["classify", "分类"],
-      ["cluster", "聚类"],
-      ["overfit", "模型选择"],
-      ["tree", "树模型"],
-      ["rl", "强化学习"],
-      ["calc", "计算题"]
-    ]
-  },
-  al: {
-    id: "al",
-    title: "数据结构与算法刷题助手",
-    bank: alBank,
-    fallbackTopics: [
-      ["complex", "复杂度分析"],
-      ["array", "数组与字符串"],
-      ["linked", "链表"],
-      ["stack", "栈与队列"],
-      ["tree", "树与二叉树"],
-      ["graph", "图"],
-      ["sort", "排序算法"],
-      ["dp", "动态规划"]
-    ]
-  },
-  cv: {
-    id: "cv",
-    title: "图像处理刷题助手",
-    bank: cvBank,
-    fallbackTopics: [
-      ["base", "基础概念"],
-      ["image", "图像表示"],
-      ["color", "颜色空间"],
-      ["filter", "滤波卷积"],
-      ["edge", "边缘与形态学"],
-      ["feature", "特征与匹配"],
-      ["geometry", "几何变换"],
-      ["deep", "深度视觉"],
-      ["eval", "评价指标"]
-    ]
-  }
+  py: { id: "py", bank: pyBank },
+  ml: { id: "ml", bank: mlBank },
+  al: { id: "al", bank: alBank },
+  cv: { id: "cv", bank: cvBank }
 };
 
 export function getAvailableAgentIds(): AgentKind[] {
@@ -91,59 +36,69 @@ export function getAgentBank(kind: AgentKind): QuizBank | null {
   return AGENT_REGISTRY[kind] ? AGENT_REGISTRY[kind].bank : null;
 }
 
-export function getAgentCourse(kind: AgentKind): CourseInfo | null {
-  const agent = AGENT_REGISTRY[kind];
-  if (!agent) return null;
-
-  return {
-    title: agent.title,
-    fallbackTopics: agent.fallbackTopics
-  };
+function getAgentConfig(kind: AgentKind): BankConfig {
+  const bank = getAgentBank(kind);
+  return (bank && bank._config) || {};
 }
 
-export function isTopicBank(value: unknown): value is TopicBank {
+export function getAgentTitle(kind: AgentKind): string {
+  return getAgentConfig(kind).title || String(kind).toUpperCase();
+}
+
+export function getAgentCourse(kind: AgentKind): { title: string } | null {
+  return AGENT_REGISTRY[kind] ? { title: getAgentTitle(kind) } : null;
+}
+
+function isTopicBank(value: unknown): value is TopicBank {
   return Boolean(value && typeof value === "object" && ("single" in value || "judge" in value));
 }
 
-export function getTopicName(bank: QuizBank, kind: AgentKind, key: string): string {
-  const course = getAgentCourse(kind);
-  return (bank._config && bank._config.topicNameMap && bank._config.topicNameMap[key])
-    || (course && (course.fallbackTopics.find(item => item[0] === key) || [key, key])[1])
-    || key;
+// 专题顺序来自 `_config.topicOrder`（同时是「有哪些专题」的白名单）；缺省时按题库键顺序兜底。
+function declaredTopicKeys(kind: AgentKind): string[] {
+  const bank = getAgentBank(kind);
+  if (!bank) return [];
+
+  const order = getAgentConfig(kind).topicOrder;
+  const keys = Array.isArray(order) && order.length ? order : Object.keys(bank);
+  return keys.filter(key => key !== "_config" && isTopicBank(bank[key]));
+}
+
+export function getTopicName(kind: AgentKind, key: string): string {
+  const names = getAgentConfig(kind).topicNameMap || {};
+  return names[key] || key;
 }
 
 export function buildAgentTopics(kind: AgentKind): TopicItem[] {
   const bank = getAgentBank(kind);
-  const course = getAgentCourse(kind);
-  if (!bank || !course) return [];
+  if (!bank) return [];
 
-  return course.fallbackTopics
-    .filter(([key]) => isTopicBank(bank[key]))
-    .map(([key, fallbackName]) => {
-      const topic = bank[key] as TopicBank;
-      return {
-        key,
-        name: getTopicName(bank, kind, key) || fallbackName,
-        total: (topic.single || []).length + (topic.judge || []).length,
-        buttonClass: "topic-btn"
-      };
-    });
+  return declaredTopicKeys(kind).map(key => {
+    const topic = bank[key] as TopicBank;
+
+    return {
+      key,
+      name: getTopicName(kind, key),
+      total: (topic.single || []).length + (topic.judge || []).length,
+      buttonClass: "topic-btn"
+    };
+  });
 }
 
 // 课程清单用于首页展示：全部题库都内置在同一个小程序里，是否可进入由后台授权决定。
 export function listAgentCourses(): CourseOption[] {
-  return Object.keys(AGENT_REGISTRY).map(id => {
-    const agent = AGENT_REGISTRY[id];
-    const topics = agent.fallbackTopics.filter(([key]) => isTopicBank(agent.bank[key]));
+  return getAvailableAgentIds().map(id => {
+    const bank = getAgentBank(id) as QuizBank;
+    const topicKeys = declaredTopicKeys(id);
+    const questionTotal = topicKeys.reduce((total, key) => {
+      const topic = bank[key] as TopicBank;
+      return total + (topic.single || []).length + (topic.judge || []).length + (topic.fill || []).length;
+    }, 0);
 
     return {
       id,
-      title: agent.title,
-      topicCount: topics.length,
-      questionTotal: topics.reduce((total, [key]) => {
-        const topic = agent.bank[key] as TopicBank;
-        return total + (topic.single || []).length + (topic.judge || []).length + (topic.fill || []).length;
-      }, 0)
+      title: getAgentTitle(id),
+      topicCount: topicKeys.length,
+      questionTotal
     };
   });
 }

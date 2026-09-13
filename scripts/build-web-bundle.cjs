@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const { buildCatalogFromRepo, REPO_DATA_DIR } = require("../web/lib/catalog.cjs");
+const { buildCatalogFromRepo, REPO_DATA_DIR, summarize } = require("../web/lib/catalog.cjs");
 
 const OUT_DIR = path.join(__dirname, "../web/data");
 const BANKS_DIR = path.join(OUT_DIR, "banks");
@@ -42,8 +42,8 @@ function main() {
   }
 
   courses.forEach(course => {
-    const total = course.topics.reduce((sum, topic) => sum + topic.single + topic.judge + topic.fill, 0);
-    console.log(`  ${course.id.padEnd(4)} ${course.title.padEnd(14)} ${course.topics.length} 个专题 / ${total} 道题`);
+    const { topicCount, questionTotal } = summarize(course.topics);
+    console.log(`  ${course.id.padEnd(4)} ${course.title.padEnd(14)} ${topicCount} 个专题 / ${questionTotal} 道题`);
   });
   console.log(`\n已生成 web/data/（${courses.length} 门课程）`);
 }

@@ -4,19 +4,23 @@ const fs = require("fs");
 const path = require("path");
 
 const scriptPath = path.join(__dirname, "generate-exam-ml.cjs");
+const courseConfigPath = path.join(__dirname, "exam-courses.cjs");
 const quizLoaderPath = path.join(__dirname, "load-quiz-engine.cjs");
 const topicLoaderPath = path.join(__dirname, "load-topic-bank.cjs");
 const { loadQuizEngine } = require("./load-quiz-engine.cjs");
 const { loadTopicBank } = require("./load-topic-bank.cjs");
 
-test("generate-exam-ml uses explicit loaders for runtime TypeScript modules", () => {
-  const source = fs.readFileSync(scriptPath, "utf8");
+test("组卷链路通过显式 loader 加载运行时 TypeScript 模块", () => {
+  // 装配在 exam-courses.cjs，入口脚本只负责「交给工厂 + 跑 CLI」。
+  const configSource = fs.readFileSync(courseConfigPath, "utf8");
+  assert.match(configSource, /loadQuizEngine\s*\(/);
+  assert.match(configSource, /loadTopicBank\s*\(/);
 
-  assert.match(source, /loadQuizEngine\s*\(/);
-  assert.match(source, /loadTopicBank\s*\(/);
-  assert.doesNotMatch(source, /require\("\.\.\/services\/quiz-engine\.ts"\)/);
-  assert.doesNotMatch(source, /function loadTopicBank\s*\(/);
-  assert.doesNotMatch(source, /readFileSync\(bankPath,\s*"utf8"\)/);
+  const entrySource = fs.readFileSync(scriptPath, "utf8");
+  assert.match(entrySource, /createCourseGenerator\("ml"\)/);
+  assert.doesNotMatch(entrySource, /require\("\.\.\/services\/quiz-engine\.ts"\)/);
+  assert.doesNotMatch(entrySource, /function loadTopicBank\s*\(/);
+  assert.doesNotMatch(entrySource, /readFileSync\(bankPath,\s*"utf8"\)/);
 });
 
 test("TS loaders share one runtime helper", () => {

@@ -3,37 +3,35 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 
-const registryPath = path.join(__dirname, "../services/registry.ts");
 const { loadTopicBank } = require("./load-topic-bank.cjs");
 
+const DATA_DIR = path.join(__dirname, "../data");
+const REGISTRY_PATH = path.join(__dirname, "../services/registry.ts");
 const QUESTION_TYPES = ["single", "judge", "fill"];
 
-// 注册表使用 ESM 语法且依赖 require()，无法直接用 TS 加载器求值，这里只解析其中稳定的结构。
-function parseRegistryAgents(registrySource) {
-  const agents = new Map();
-  const agentPattern = /id:\s*"(\w+)"[\s\S]*?fallbackTopics:\s*\[([\s\S]*?)\n\s*\]/g;
-  let match = agentPattern.exec(registrySource);
-
-  while (match) {
-    const [, agentId, topicBlock] = match;
-    const pairs = [];
-    const pairPattern = /\[\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\]/g;
-    let pair = pairPattern.exec(topicBlock);
-
-    while (pair) {
-      pairs.push([pair[1], pair[2]]);
-      pair = pairPattern.exec(topicBlock);
-    }
-
-    agents.set(agentId, pairs);
-    match = agentPattern.exec(registrySource);
-  }
-
-  return agents;
+function topicFileIds() {
+  return fs
+    .readdirSync(DATA_DIR)
+    .filter(file => /^topic-.*\.ts$/.test(file))
+    .map(file => file.replace(/^topic-/, "").replace(/\.ts$/, ""))
+    .sort();
 }
 
-function readAgents() {
-  return parseRegistryAgents(fs.readFileSync(registryPath, "utf8"));
+// registry.ts 是 ESM + require 混合语法，没法直接求值；它现在只剩 id 与 bank，正则抠 id 足够稳。
+function registryIds() {
+  const source = fs.readFileSync(REGISTRY_PATH, "utf8");
+  return Array.from(source.matchAll(/id:\s*"(\w+)"/g), match => match[1]).sort();
+}
+
+// 标题、专题顺序与专题名都以题库 _config 为准，这里集中读一遍给各用例复用。
+function readCourse(id) {
+  const bank = loadTopicBank(id);
+  const config = bank._config || {};
+  const topicKeys = Array.isArray(config.topicOrder) && config.topicOrder.length
+    ? config.topicOrder
+    : Object.keys(bank).filter(key => key !== "_config");
+
+  return { bank, config, topicKeys };
 }
 
 function countByType(bank, topicKeys) {
@@ -46,22 +44,27 @@ function countByType(bank, topicKeys) {
   }, { single: 0, judge: 0, fill: 0 });
 }
 
-test("注册表中声明的专题与题库文件完全对齐", () => {
-  const agents = readAgents();
+test("registry 的课程清单与 data/topic-*.ts 一一对应", () => {
+  const ids = topicFileIds();
+  assert.ok(ids.length > 0, "data/ 下没有任何 topic-*.ts");
 
-  assert.ok(agents.size > 0, "未从 services/registry.ts 解析到任何智能体");
-  assert.ok(agents.has("py"), "registry 缺少 py 智能体");
-  assert.ok(agents.has("ml"), "registry 缺少 ml 智能体");
-  assert.ok(agents.has("al"), "registry 缺少 al 智能体");
+  assert.deepEqual(
+    registryIds(),
+    ids,
+    "services/registry.ts 与 data/topic-*.ts 必须一一对应：加了题库要在注册表登记，反之亦然"
+  );
+});
 
-  agents.forEach((topics, agentId) => {
-    const bank = loadTopicBank(agentId);
+test("题库 _config 声明的课程标题与专题与题库内容完全对齐", () => {
+  topicFileIds().forEach(agentId => {
+    const { bank, config, topicKeys } = readCourse(agentId);
 
-    assert.ok(bank && typeof bank === "object", `${agentId} 题库加载失败（data/topic-${agentId}.ts）`);
-    assert.ok(topics.length > 0, `${agentId} 未声明任何专题`);
-    assert.ok(bank._config, `${agentId} 题库缺少 _config`);
+    assert.equal(typeof config.title, "string", `${agentId} 缺少 _config.title`);
+    assert.ok(config.title.trim().length > 0, `${agentId} 的 _config.title 为空`);
+    assert.ok(topicKeys.length > 0, `${agentId} 未声明任何专题`);
 
-    topics.forEach(([topicKey, fallbackName]) => {
+    const nameMap = config.topicNameMap || {};
+    topicKeys.forEach(topicKey => {
       const topic = bank[topicKey];
 
       assert.ok(topic, `${agentId}.${topicKey} 在题库中不存在`);
@@ -69,23 +72,19 @@ test("注册表中声明的专题与题库文件完全对齐", () => {
         QUESTION_TYPES.some(type => Array.isArray(topic[type])),
         `${agentId}.${topicKey} 不是有效专题（single/judge/fill 均为空）`
       );
-
-      const nameMap = bank._config.topicNameMap || {};
       assert.ok(
         nameMap[topicKey],
-        `${agentId}.${topicKey} 缺少 _config.topicNameMap 条目，专题名会回退为「${fallbackName}」`
+        `${agentId}.${topicKey} 缺少 _config.topicNameMap 条目，专题名会退化成 key`
       );
     });
   });
 });
 
 test("题库题目结构合法：题干、选项、答案、解析齐全", () => {
-  const agents = readAgents();
+  topicFileIds().forEach(agentId => {
+    const { bank, topicKeys } = readCourse(agentId);
 
-  agents.forEach((topics, agentId) => {
-    const bank = loadTopicBank(agentId);
-
-    topics.forEach(([topicKey]) => {
+    topicKeys.forEach(topicKey => {
       const topic = bank[topicKey] || {};
 
       QUESTION_TYPES.forEach(type => {
@@ -113,8 +112,8 @@ test("题库题目结构合法：题干、选项、答案、解析齐全", () =>
             });
             assert.ok(
               Number.isInteger(question.answer)
-                && question.answer >= 0
-                && question.answer < question.options.length,
+              && question.answer >= 0
+              && question.answer < question.options.length,
               `${label} answer 越界：${question.answer}（选项数 ${question.options.length}）`
             );
           }
@@ -136,11 +135,9 @@ test("题库题目结构合法：题干、选项、答案、解析齐全", () =>
 });
 
 test("每个智能体的题量满足一次完整组卷（单选 20 / 判断 10 / 填空 10）", () => {
-  const agents = readAgents();
-
-  agents.forEach((topics, agentId) => {
-    const bank = loadTopicBank(agentId);
-    const totals = countByType(bank, topics.map(([topicKey]) => topicKey));
+  topicFileIds().forEach(agentId => {
+    const { bank, topicKeys } = readCourse(agentId);
+    const totals = countByType(bank, topicKeys);
 
     assert.ok(totals.single >= 20, `${agentId} 单选题仅 ${totals.single} 道，不足 20 道`);
     assert.ok(totals.judge >= 10, `${agentId} 判断题仅 ${totals.judge} 道，不足 10 道`);

@@ -7,20 +7,16 @@ const path = require("path");
 const auth = require("../web/lib/auth.cjs");
 const uploadRules = require("../web/lib/upload-rules.cjs");
 const { DATA_DIR, ensureWritable, isInsideAppDir } = require("../web/lib/data-dir.cjs");
+const { createReporter } = require("./check-report.cjs");
 
 const APP_DIR = path.join(__dirname, "..");
 const REPO_ACCOUNTS = path.join(APP_DIR, "data", "accounts.json");
 const BUNDLED_ACCOUNTS = path.join(APP_DIR, "web", "data", "accounts.json");
 
-const results = [];
+const reporter = createReporter();
 
-function report(ok, title, detail) {
-  results.push({ ok, title });
-  console.log(`[${ok ? "OK" : "!!"}] ${title}`);
-  String(detail || "")
-    .split("\n")
-    .forEach(line => console.log(`     ${line}`));
-}
+// 各 check 统一用 report(条件, 标题, 详情) 记录，输出与退出码交给 report 模块。
+const report = (passed, title, detail) => reporter.report(passed ? "ok" : "fail", title, detail);
 
 function checkAccounts() {
   let users = [];
@@ -100,13 +96,7 @@ function main() {
   checkSessionStore();
   checkDataDir();
 
-  const failed = results.filter(item => !item.ok);
-  console.log(`\n结论：${results.length - failed.length} / ${results.length} 项通过。`);
-  if (failed.length) {
-    console.log("待处理：");
-    failed.forEach(item => console.log(`  - ${item.title}`));
-    process.exitCode = 1;
-  }
+  reporter.print();
 }
 
 main();

@@ -4,6 +4,8 @@
 const fs = require("fs");
 const path = require("path");
 
+const { createReporter } = require("./check-report.cjs");
+
 const APP_DIR = path.join(__dirname, "..");
 const RUNTIME_CONFIG_PATH = path.join(APP_DIR, "services", "runtime-config.ts");
 const USER_DB_PATH = path.join(APP_DIR, "services", "user-db.ts");
@@ -35,9 +37,7 @@ const MANUAL_ITEMS = [
   "后台接口已能用 code 换 openid，并按用户购买情况返回 agents"
 ];
 
-const LABELS = { ok: "[OK]", fail: "[!!]", hint: "[提示]" };
-
-let results = [];
+const reporter = createReporter({ manual: MANUAL_ITEMS });
 
 function readText(file) {
   try {
@@ -55,9 +55,7 @@ function readJson(file) {
   }
 }
 
-function report(level, title, detail) {
-  results.push({ level, title, detail });
-}
+const report = reporter.report;
 
 // 只做静态解析：runtime-config.ts 是 ESM + TypeScript，Node 不能直接求值。
 function parseRuntimeConfigBlock(source, blockName) {
@@ -207,32 +205,17 @@ function checkProject() {
 }
 
 function runAllChecks() {
-  results = [];
+  // 同一个报告器会被反复使用（测试里调用多次），所以清空而不是重建。
+  reporter.results.length = 0;
   checkProductionConfig();
   checkAuthorizationSource();
   checkCloudDatabase();
   checkProject();
-  return results;
+  return reporter.results;
 }
 
 function printReport() {
-  results.forEach(item => {
-    console.log(`${LABELS[item.level] || item.level} ${item.title}`);
-    String(item.detail || "")
-      .split("\n")
-      .forEach(line => console.log(`     ${line}`));
-  });
-
-  console.log("\n人工确认项（脚本判不了，提审前逐条过一遍）：");
-  MANUAL_ITEMS.forEach(item => console.log(`  [手工] ${item}`));
-
-  const failed = results.filter(item => item.level === "fail");
-  console.log(`\n结论：${results.length - failed.length} / ${results.length} 项自动检查通过。`);
-  if (failed.length) {
-    console.log("待处理：");
-    failed.forEach(item => console.log(`  - ${item.title}`));
-    process.exitCode = 1;
-  }
+  reporter.print();
 }
 
 function main() {

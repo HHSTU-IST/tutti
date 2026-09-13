@@ -43,21 +43,11 @@ export interface CalcQuestion extends EssayQuestion {
 }
 
 export interface BankConfig {
+  /** 课程标题，首页与网页端课程卡片直接用它。 */
+  title?: string;
+  /** 专题顺序（也是「有哪些专题」的白名单），缺省时按题库键顺序兜底。 */
+  topicOrder?: string[];
   topicNameMap?: Record<string, string>;
-  knowledgeBase?: Record<string, string>;
-  examPaper?: {
-    school: string;
-    academicYear: string;
-    term: string;
-    courseName: string;
-    paperCode: string;
-    targetMajor: string;
-    singleCount: number;
-    judgeCount: number;
-    fillCount: number;
-    calcCount: number;
-    essayCount: number;
-  };
 }
 
 export interface QuizBank {
@@ -66,11 +56,6 @@ export interface QuizBank {
   combined?: EssayQuestion[];
   essay?: EssayQuestion[];
   [topic: string]: TopicBank | BankConfig | EssayQuestion[] | CalcQuestion[] | undefined;
-}
-
-export interface CourseInfo {
-  title: string;
-  fallbackTopics: Array<[string, string]>;
 }
 
 export interface TopicItem {

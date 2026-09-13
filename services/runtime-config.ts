@@ -56,6 +56,13 @@ export function findMissingProductionConfig(): string[] {
   return missing;
 }
 
+/** 真机上看不到 console，配置缺失时界面也得说清楚，文案只在这一处定义。 */
+export const MISSING_CONFIG_MESSAGE = "生产配置缺失，请联系管理员（详见开发者工具日志）。";
+
+export function hasMissingProductionConfig(): boolean {
+  return findMissingProductionConfig().length > 0;
+}
+
 /**
  * 生产配置的「建议项」：不影响能否跑通，但漏了容易在真机上踩坑。
  * 多环境时 cloudEnv 留空会连上默认云环境，学员的答题记录就写到别处去了。

@@ -13,7 +13,9 @@ const MINIPROGRAM_SOURCES = [
   "app.ts",
   "pages/index/index.ts",
   "pages/quiz/quiz.ts",
+  "services/device.ts",
   "services/purchase.ts",
+  "services/registry.ts",
   "services/runtime-config.ts",
   "services/user-db.ts"
 ];
@@ -68,6 +70,54 @@ test("小程序 TypeScript 文件语法可解析", () => {
   });
 
   assert.deepEqual(broken, [], "这些文件解析失败，开发者工具里也会编译不过");
+});
+
+test("wxml 绑定的事件在对应页面里都有实现方法", () => {
+  const missing = [];
+
+  ["index/index", "quiz/quiz"].forEach(page => {
+    const wxml = fs.readFileSync(path.join(__dirname, `../pages/${page}.wxml`), "utf8");
+    const source = fs.readFileSync(path.join(__dirname, `../pages/${page}.ts`), "utf8");
+    const handlers = Array.from(
+      wxml.matchAll(/bind(?:tap|input|change|confirm|blur|focus)="([\w$]+)"/g),
+      match => match[1]
+    );
+
+    handlers.forEach(handler => {
+      if (!new RegExp(`\\b${handler}\\s*\\(`).test(source)) missing.push(`${page}.wxml → ${handler}`);
+    });
+  });
+
+  assert.deepEqual(missing, [], "wxml 绑定的事件在 .ts 里找不到同名方法（改名后忘了同步）");
+});
+
+test("wxss 括号配平，且没有以逗号结尾的悬挂选择器", () => {
+  const root = path.join(__dirname, "..");
+  const files = [];
+
+  const appWxss = path.join(root, "app.wxss");
+  if (fs.existsSync(appWxss)) files.push(appWxss);
+
+  const pagesDir = path.join(root, "pages");
+  fs.readdirSync(pagesDir, { recursive: true })
+    .filter(entry => String(entry).endsWith(".wxss"))
+    .forEach(entry => files.push(path.join(pagesDir, String(entry))));
+
+  assert.ok(files.length > 0, "没有找到任何 wxss 文件");
+
+  const broken = [];
+  files.forEach(file => {
+    const source = fs.readFileSync(file, "utf8");
+    const open = (source.match(/\{/g) || []).length;
+    const close = (source.match(/\}/g) || []).length;
+    const name = path.relative(root, file);
+
+    if (open !== close) broken.push(`${name}: 花括号不配平（{ ${open} 个 / } ${close} 个）`);
+    // 删规则时把分组选择器删剩一半（`.a,` 直接跟 `}`）就是编译期的 selector expected。
+    if (/,\s*\}/.test(source)) broken.push(`${name}: 有选择器列表只剩下逗号（selector expected）`);
+  });
+
+  assert.deepEqual(broken, []);
 });
 
 test("自检脚本不会因为提示项而失败", () => {

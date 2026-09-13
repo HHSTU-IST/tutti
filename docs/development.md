@@ -51,15 +51,30 @@
 
 全部课程题库都编译进同一个小程序，首页登录后列出所有课程。后台 `agents` 中对应值为 `true` 的课程显示「进入练习」，点击进入 `/pages/quiz/quiz?kind=<课程 ID>`；未开通课程置灰显示「未开通」，点击提示尚未开通。答题页会校验 URL 传入的课程是否已授权，防止绕过首页直接进入未付费题库。每门课程的答题统计、专题进度与错题本按课程 ID 分开保存，互不干扰。
 
+### 课程元数据的唯一真源
+
+课程标题、专题顺序、专题名（以及每个专题的单选/判断/填空内容）**只写在题库文件 `data/topic-*.ts` 的 `_config` 里**：
+
+```ts
+"_config": {
+  "title": "Python 刷题助手",
+  "topicOrder": ["var", "flow", "func", "oop", "decorator", "magic", "generator", "thread", "code"],
+  "topicNameMap": { "var": "变量", "flow": "控制流", "…": "…" }
+}
+```
+
+- 小程序端：`services/registry.ts` 只登记 `id → bank`，标题/专题都从 `_config` 读。
+- 网页端构建：`web/lib/catalog.cjs` 也直接读 `_config`（不再正则解析 `registry.ts`）。
+- 组卷脚本：`scripts/generate-exam.cjs` 从 `bank._config` 取专题顺序与名称。
+- `scripts/topic-bank.test.cjs` 会校验：注册表与 `data/topic-*.ts` 一一对应、`title` 非空、`topicOrder` 里的专题在题库中存在且 `topicNameMap` 有条目。
+
 ### 新增一门课程（智能体）
 
-需要同步改三处：
-
-- `data/access.ts` 中的本地测试开关（同时提供默认全 `false` map 的键列表）
-- 对应题库文件 `data/topic-<id>.ts`
-- `services/registry.ts` 中的 `AGENT_REGISTRY`
-
-> 参考示例：`al` 与 `cv` 均已完整接入——题库分别在 `data/topic-al.ts`、`data/topic-cv.ts`，注册见 `services/registry.ts` 的 `AGENT_REGISTRY`，本地测试开关见 `data/access.ts`（开发环境置 `true` 即可扫码进入）。
+1. 新建题库 `data/topic-<id>.ts`，在 `_config` 里写好 `title`、`topicOrder`、`topicNameMap`；
+2. 在 `services/registry.ts` 的 `AGENT_REGISTRY` 里登记 `{ id, bank }`（只需这两项）；
+3. 在 `data/access.ts` 里加该课程的本地测试开关（生产不受它影响，开通由后台 `agents` 决定）；
+4. 跑 `node --test`：注册表对齐、专题与题量校验都在 `scripts/topic-bank.test.cjs` 里；
+5. 要出试卷的话，在 `scripts/exam-courses.cjs` 的 `COURSES` 里加一行参数，并在 `templates/examif.json` 里补该课程的考试信息。
 
 ## 网页版实现
 
@@ -231,14 +246,14 @@ node scripts/miniprogram-release-check.cjs    # 小程序发布前自检
 
 `templates/` 放模板与配置，`outputs/` 放生成物（都在小程序上传包的排除清单里，不会打进去）：
 
-| 路径                            | 作用                                     |
-| ------------------------------- | ---------------------------------------- |
-| `templates/exam-template.md`    | 试卷模板，课程相关取值写成 `{{占位符}}`  |
-| `templates/examif.json`         | 考试基本信息：课程代码、名称、学年、学期、卷别、试卷代码、适用对象 |
-| `templates/export.json`         | Word 导出的纸张、页边距与各段样式配置    |
-| `templates/latex-replace.json`  | 数学式的文本化替换规则                   |
-| `outputs/*.md`                  | 生成的试卷与答案（`-A` / `-Ak` / `-B` / `-Bk`） |
-| `outputs/*.docx`                | 由 Markdown 导出的 Word 文档             |
+| 路径                           | 作用                                                               |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `templates/exam-template.md`   | 试卷模板，课程相关取值写成 `{{占位符}}`                            |
+| `templates/examif.json`        | 考试基本信息：课程代码、名称、学年、学期、卷别、试卷代码、适用对象 |
+| `templates/export.json`        | Word 导出的纸张、页边距与各段样式配置                              |
+| `templates/latex-replace.json` | 数学式的文本化替换规则                                             |
+| `outputs/*.md`                 | 生成的试卷与答案（`-A` / `-Ak` / `-B` / `-Bk`）                    |
+| `outputs/*.docx`               | 由 Markdown 导出的 Word 文档                                       |
 
 ```bash
 # 按 templates/examif.json 里该课程的配置，生成 A、B 两卷（正文 + 答案），并触发 docx 导出

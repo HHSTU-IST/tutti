@@ -35,13 +35,14 @@ const DEFAULT_EXAM_LAYOUT = {
   essayScore: 10
 };
 
-const COURSE_NAME_MAP = {
-  ml: "机器学习概论",
-  cv: "计算机视觉基础"
-};
-
-function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames, fillPerTopic, defaultFileName }) {
+function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFileName }) {
   const { getQuestions, pickRandomMany, normalizeQuestion, getQuestionText } = engine;
+  const config = bank._config || {};
+  // 专题顺序与专题名取自题库 _config，与小程序端、网页端构建脚本同源。
+  const topicOrder = Array.isArray(config.topicOrder) && config.topicOrder.length
+    ? config.topicOrder
+    : Object.keys(bank).filter(key => key !== "_config");
+  const topicNames = config.topicNameMap || {};
 
   function fillTemplate(text, values) {
     return Object.keys(values).reduce((result, key) => {
@@ -120,7 +121,7 @@ function createExamGenerator({ bank, engine, courseCode, topicOrder, topicNames,
     }
 
     const actualCourseCode = String(record.courseCode || "").toLowerCase();
-    const courseName = record.courseName || COURSE_NAME_MAP[actualCourseCode];
+    const courseName = record.courseName;
     const yearRaw = Number(record.yearRaw);
     const termRaw = Number(record.termRaw);
     const versionRaw = normalizeVersionRaw(String(record.versionRaw || "A"));
