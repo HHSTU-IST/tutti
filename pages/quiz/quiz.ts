@@ -2,6 +2,7 @@ export { };
 
 import { RuntimeDeviceInfo, getRuntimeDeviceInfo } from "../../services/device";
 import { AgentKind, resolveUserSession } from "../../services/purchase";
+import { findMissingProductionConfig } from "../../services/runtime-config";
 import {
   AnswerStats,
   UserProfile,
@@ -194,7 +195,9 @@ Page<QuizData, QuizPageInstance>({
     if (!session) {
       this.setData({
         isReady: false,
-        readyMessage: "未读取到题库授权，请返回首页完成微信扫码登录。"
+        readyMessage: findMissingProductionConfig().length
+          ? "生产配置缺失，请联系管理员（详见开发者工具日志）。"
+          : "未读取到题库授权，请返回首页完成微信扫码登录。"
       });
       return;
     }
