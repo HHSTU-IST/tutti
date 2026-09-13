@@ -30,20 +30,19 @@ test("生产配置：关掉本地测试授权、打开云数据库", () => {
   assert.equal(levels["生产启用云数据库"], "ok", "生产必须 enableCloudDatabase=true，否则答题记录不同步");
 });
 
-test("生产登录接口：留空要报错，填了必须是 HTTPS", () => {
+test("生产登录走云函数：函数名与云函数目录都在", () => {
   const levels = levelsByTitle();
-  assert.ok(["ok", "fail"].includes(levels["生产登录接口已填"]));
-
-  // 接口为空时跳过 HTTPS 判定；填了就必须过。
-  const https = levels["生产登录接口为 HTTPS"];
-  assert.notEqual(https, "fail", "wechatLoginApiUrl 填了就必须是 HTTPS");
+  assert.equal(levels["登录云函数名已填"], "ok", "loginFunctionName 不能为空");
+  assert.equal(levels["登录云函数已入库"], "ok", "cloudfunctions/login 要有 index.js 与 package.json");
+  assert.equal(levels["云函数用 getWXContext 取 openid"], "ok");
+  assert.equal(levels["工程已声明 cloudfunctionRoot"], "ok");
 });
 
 test("云数据库与授权来源自检项通过", () => {
   const levels = levelsByTitle();
   assert.equal(levels["云数据库集合名一致"], "ok");
   assert.equal(levels["启动时初始化云环境"], "ok");
-  assert.equal(levels["生产授权走后台接口"], "ok");
+  assert.equal(levels["生产授权走登录云函数"], "ok");
   assert.equal(levels["页面文件齐全"], "ok");
   assert.equal(levels["上传包排除项齐全"], "ok");
 });
@@ -52,7 +51,7 @@ test("parseRuntimeConfigBlock 能读到生产配置的字段", () => {
   const config = parseRuntimeConfigBlock(fs.readFileSync(RUNTIME_CONFIG_PATH, "utf8"), "PRODUCTION_RUNTIME_CONFIG");
 
   assert.ok(config, "应能解析出 PRODUCTION_RUNTIME_CONFIG");
-  assert.equal(typeof config.wechatLoginApiUrl, "string");
+  assert.equal(typeof config.loginFunctionName, "string");
   assert.equal(config.enableLocalWechatTestLogin, false);
   assert.equal(config.enableCloudDatabase, true);
   assert.equal(typeof config.cloudEnv, "string");

@@ -11,8 +11,8 @@
 - **题库**: 本地 `data/topic-*.ts`，全部内置于同一小程序
 - **题库类型**: 共享类型 `types/quiz-bank.ts`
 - **智能体开关**: 本地测试开关 `data/access.ts`，生产默认全部为 `false`（由后台 `agents` 决定）
-- **登录**: 仅支持微信登录，使用 `wx.login` 获取 code 后交给后台校验
-- **授权**: 后台根据用户购买情况返回可加载的刷题助手
+- **登录**: 仅支持微信登录，生产走 `login` 云函数（`cloud.getWXContext()` 取 openid，无需自建后台）
+- **授权**: 由 `cloudfunctions/login` 按该用户在 `user_profiles` 里的 `agents` 返回可加载的刷题助手
 - **用户数据库**: 微信云数据库集合 `user_profiles`
 - **运行开关**: `services/runtime-config.ts`，会根据小程序环境自动选择开发 / 生产配置
 - **Node**: 统一要求 ≥ 22.6.0（`web/package.json` 的 `engines`；常量与比较逻辑在 `web/lib/node-version.cjs`，服务启动时会打印实际版本）
@@ -20,6 +20,7 @@
 ## 目录结构
 
 ```text
+├── cloudfunctions/ # 云函数：login（getWXContext 取 openid + 按 user_profiles.agents 返回开通）
 ├── data/           # 题库 data/topic-*.ts、本地测试开关、网页端账号表
 ├── docs/           # 项目文档：development.md（本文件）、design.md（试卷智能体设计）
 ├── outputs/        # 试卷脚本的生成物（.md / .docx）
@@ -174,9 +175,9 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 
 > 账号真源是 `data/accounts.json`，CLI 只改这一处，服务端读的也是这一处：改完重启服务即生效。已经在用的人要重新登录一次，才会带上新的课程权限（会话里的解锁课程是登录时定的）。
 
-## 微信登录授权接口
+## 微信登录与开通（云函数）
 
-授权入口在 `services/purchase.ts`。后台接口返回格式：
+登录不再自建后台：`services/purchase.ts` 用 `wx.cloud.callFunction` 调 `login` 云函数（函数名在 `services/runtime-config.ts` 的 `loginFunctionName`），实现放在 `cloudfunctions/login/index.js`——它用 `cloud.getWXContext()` 直接取调用者 openid，所以**不需要 AppSecret、不需要 HTTPS 域名与备案**。返回格式：
 
 ```json
 {
@@ -188,15 +189,9 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 }
 ```
 
-小程序会先调用 `wx.login` 获取 `code`，再向后台发送：
+`openId` 也可命名为 `wechatOpenId`（小程序两种都认）。`agents` 的 key 是课程 ID，value 表示是否已开通：`cloudfunctions/login` 读的就是该用户在 `user_profiles` 文档里的 `agents` 字段，所以**开通课程 = 在云开发控制台把该用户文档的 `agents.<课程>` 改成 `true`**，改完让学员重新登录（会话缓存在 storage 里，不重登还是旧的开通情况）。集合还没建或读失败时，函数按「未开通」返回，不会把异常抛给小程序。
 
-```json
-{
-  "code": "微信登录临时凭证"
-}
-```
-
-`openId` 也可命名为 `wechatOpenId`。`agents` 的 key 是智能体 ID，value 表示是否已购买。生产环境默认值为全 `false`，本地测试环境会读取 `data/access.ts` 作为覆盖。购买后后台返回对应 key 为 `true`。没有登录、没有授权或接口未配置时，用户界面保持空白。
+本地开发不走云函数：`enableLocalWechatTestLogin=true` 时用 `wx.login` 的 code 生成本地测试 openid，并读 `data/access.ts` 当开通情况（见「扫码测试登录」）。生产配置里这个开关恒为 `false`，自检会校验。云函数调用失败时退回本地缓存会话，不会把已登录的学员踢下线；首次登录就失败的话，首页会显示 `getLastLoginFailure()` 给出的原因（例如「确认云开发里已上传 cloudfunctions/login」），而不是笼统的「未读取到可用授权」。
 
 ## 用户数据库
 
@@ -271,18 +266,18 @@ node scripts/miniprogram-release-check.cjs    # 小程序发布前自检
 - [x] 默认密码不再硬编码：`init` 生成的密码是随机的（也可用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定），自检脚本会复核存量账号是否还在用 `admin2026` / `demo2026`
 - [x] `data/accounts.json` 已 `git rm --cached` 并写入 `.gitignore`，账号盐值与哈希不进公开仓库（真源只有这一份，服务端直接读它）
 - [x] 会话默认落盘：一个会话一个 JSON 文件，放在 `TUTTI_DATA_DIR/sessions/`，重启不掉线；多实例把 `TUTTI_DATA_DIR` 指向同一持久化目录即共用会话（见 [会话与运行数据](#会话与运行数据)）
-- [ ] 运行数据要不要挪出应用目录：默认 `TUTTI_DATA_DIR=web/data`，更新代码会连登录会话、上传规则与学员作业一起换掉（自检里这条是 `[提示]`，不算未通过）。打算长期用就用 `TUTTI_DATA_DIR` 指到应用目录之外；之后每次重启或更新代码，用 `GET /api/health` 的 `dataDirBoots` / `dataDirFirstBootAt` 复核——`boots` 继续累加且 `firstBootAt` 不变，说明数据目录稳住了
 
 ### 小程序
 
 `node scripts/miniprogram-release-check.cjs` 逐项自检（`[手工]` 项脚本判不了，需人工确认）：
 
-- [ ] `wechatLoginApiUrl` 已填且为 HTTPS（未填时启动会 `console.error` 缺失项，首页也会显示「生产配置缺失，请联系管理员」，而不是笼统的「未读取到可用授权」）
-- [ ] 云环境已建 `user_profiles` 集合（多环境需填 `cloudEnv`；留空走默认环境，自检会提示）
-- [x] 生产开通由后台 `agents` 返回决定（本地测试开关是 `data/access.ts`，只在开发配置生效：`enableLocalWechatTestLogin=false` 时完全不读；自检会校验这个开关没被改回来）
+- [x] 生产登录走 `login` 云函数：`cloudfunctions/login` 已入库（`cloud.getWXContext()` 取 openid，不需要 AppSecret 与备案域名），`project.config.json` 配了 `cloudfunctionRoot`，`services/purchase.ts` 用 `wx.cloud.callFunction` 调它——这三条自检逐项核对
+- [ ] `cloudfunctions/login` 已上传到云开发：开发者工具里右键该目录 →「上传并部署：云端安装依赖」`[手工]`
+- [ ] 云开发控制台建好 `user_profiles` 集合，权限设为「仅创建者可读写」；开通课程就是改该用户文档的 `agents.<课程>` 为 `true`，改完让学员重新登录 `[手工]`
+- [x] 生产开通由登录云函数按 `user_profiles.agents` 决定（本地测试开关是 `data/access.ts`，只在开发配置生效：`enableLocalWechatTestLogin=false` 时完全不读；自检会校验这个开关没被改回来）
 - [ ] trial 体验版真机跑通再提审
 
-自检脚本顺带会查：`appid` 是否已填、`project.config.json` 有没有漏排除 `web/`、`scripts/`、`docs/`、`templates/`、`outputs/`（否则包体白涨）、`app.json` 声明的页面文件是否齐全、以及各题库 `_config` 与注册表是否对齐。
+自检脚本顺带会查：`appid` 是否已填、`project.config.json` 有没有漏排除 `web/`、`scripts/`、`docs/`、`templates/`、`outputs/`、`cloudfunctions/`（否则包体白涨）、`app.json` 声明的页面文件是否齐全、以及各题库 `_config` 与注册表是否对齐。
 
 ## 试卷生成流水线
 

@@ -1,5 +1,5 @@
 import { getRuntimeDeviceInfo, resolveDeviceInfo } from "../../services/device";
-import { AgentKind, resolveUserSession } from "../../services/purchase";
+import { AgentKind, getLastLoginFailure, resolveUserSession } from "../../services/purchase";
 import { MISSING_CONFIG_MESSAGE, hasMissingProductionConfig } from "../../services/runtime-config";
 import {
   AnswerStats,
@@ -209,7 +209,7 @@ Page<QuizData, QuizPageInstance>({
         isReady: false,
         readyMessage: hasMissingProductionConfig()
           ? MISSING_CONFIG_MESSAGE
-          : "未读取到题库授权，请返回首页完成微信扫码登录。"
+          : (getLastLoginFailure() || "未读取到题库授权，请返回首页完成微信登录。")
       });
       return;
     }
