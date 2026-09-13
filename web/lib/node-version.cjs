@@ -43,7 +43,5 @@ function checkNodeVersion(version = process.versions.node) {
 
 module.exports = {
   MIN_NODE_VERSION,
-  checkNodeVersion,
-  compareVersions,
-  parseVersion
+  checkNodeVersion
 };

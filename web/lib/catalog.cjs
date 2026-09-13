@@ -3,15 +3,8 @@ const path = require("path");
 
 const REPO_DATA_DIR = path.join(__dirname, "../../data");
 
-const FALLBACK_TITLES = {
-  py: "Python 编程",
-  ml: "机器学习概论",
-  al: "数据结构与算法",
-  cv: "图像处理"
-};
-
 function isTopicBank(value) {
-  return Boolean(value && typeof value === "object" && ("single" in value || "judge" in value || "fill" in value));
+  return Boolean(value && typeof value === "object" && ("single" in value || "judge" in value));
 }
 
 function countTopic(topic) {
@@ -29,11 +22,11 @@ function summarize(topics) {
   };
 }
 
-// 直接从仓库的 data/topic-*.ts 构建课程清单（构建脚本与开发态回退共用同一份逻辑）。
+// 直接从仓库的 data/topic-*.ts 构建课程清单（构建脚本与开发态回退共用这一份逻辑）。
+// 课程标题、专题顺序与专题名都取自题库 `_config`——与小程序端 services/registry.ts 同源，
+// 不再正则解析 registry.ts（那份元数据已下沉到题库）。
 function buildCatalogFromRepo() {
   const { loadTopicBank } = require("../../scripts/load-topic-bank.cjs");
-  const { loadAgentRegistryMeta } = require("../../scripts/load-registry-meta.cjs");
-  const registry = loadAgentRegistryMeta();
 
   return fs
     .readdirSync(REPO_DATA_DIR)
@@ -42,13 +35,10 @@ function buildCatalogFromRepo() {
     .sort()
     .map(id => {
       const bank = loadTopicBank(id);
-      const nameMap = (bank._config && bank._config.topicNameMap) || {};
-      const registryTopics = new Map((registry[id] && registry[id].topics) || []);
-
-      // 与小程序 buildAgentTopics 口径一致：只取 registry 登记的专题，
-      // 避免把 calcQuestions / combined 这类非练习容器也当成专题。
-      const declaredKeys = registry[id] && registry[id].topics.length
-        ? registry[id].topics.map(([key]) => key)
+      const config = bank._config || {};
+      const nameMap = config.topicNameMap || {};
+      const declaredKeys = Array.isArray(config.topicOrder) && config.topicOrder.length
+        ? config.topicOrder
         : Object.keys(bank).filter(key => key !== "_config");
 
       const topics = [];
@@ -59,7 +49,7 @@ function buildCatalogFromRepo() {
         .forEach(key => {
           const counts = countTopic(bank[key]);
           if (counts.single + counts.judge + counts.fill === 0) return;
-          topics.push(Object.assign({ key, name: nameMap[key] || registryTopics.get(key) || key }, counts));
+          topics.push(Object.assign({ key, name: nameMap[key] || key }, counts));
           bankSlice[key] = {
             single: bank[key].single || [],
             judge: bank[key].judge || [],
@@ -69,7 +59,7 @@ function buildCatalogFromRepo() {
 
       return {
         id,
-        title: (registry[id] && registry[id].title) || FALLBACK_TITLES[id] || id.toUpperCase(),
+        title: config.title || id.toUpperCase(),
         topics,
         bank: bankSlice
       };

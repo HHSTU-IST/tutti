@@ -1,5 +1,17 @@
 const data: import("../types/quiz-bank").QuizBank = {
     "_config": {
+        "title": "Python 刷题助手",
+        "topicOrder": [
+            "var",
+            "flow",
+            "func",
+            "oop",
+            "decorator",
+            "magic",
+            "generator",
+            "thread",
+            "code"
+        ],
         "topicNameMap": {
             "var": "变量",
             "flow": "控制流",
@@ -10,23 +22,6 @@ const data: import("../types/quiz-bank").QuizBank = {
             "generator": "生成器",
             "thread": "进程与线程",
             "code": "编程题"
-        },
-        "knowledgeBase": {
-            "变量": "Python 变量不需要提前声明类型，赋值时会自动绑定对象。",
-            "数据类型": "常见基础类型包括 int、float、str、bool、list、tuple、dict、set。",
-            "if": "if 语句根据条件真假选择执行分支，条件后面必须写冒号。",
-            "for": "for 常用于遍历可迭代对象，例如列表、字符串、range 对象。",
-            "while": "while 会在条件为真时重复执行，记得更新循环条件避免死循环。",
-            "函数": "函数用 def 定义，可以接收参数，也可以通过 return 返回结果。",
-            "return": "return 会结束当前函数，并把结果交给调用方；没有 return 时默认返回 None。",
-            "lambda": "lambda 用来创建简单匿名函数，适合短小的一行表达式。",
-            "类": "类是创建对象的模板，实例方法通常把 self 作为第一个参数。",
-            "继承": "继承可以复用父类代码，子类也可以重写父类方法。",
-            "装饰器": "装饰器本质上是可调用对象，用来在不改调用方式的前提下增强函数或类。",
-            "生成器": "包含 yield 的函数会返回生成器，适合惰性产生数据。",
-            "线程": "线程适合 IO 密集型任务；在 CPython 中，CPU 密集型任务会受到 GIL 影响。",
-            "进程": "多进程拥有独立内存空间，更适合 CPU 密集型并行任务。",
-            "魔法方法": "魔法方法是前后双下划线的方法，例如 __init__、__str__、__len__。"
         }
     },
     "var": {

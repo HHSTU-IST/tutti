@@ -36,6 +36,12 @@ export function getRuntimeDeviceInfo(): RuntimeDeviceInfo {
   };
 }
 
+/** 页面取设备信息：优先用 app 全局（onLaunch 时已刷新过），没有再现场读一次。 */
+export function resolveDeviceInfo(): RuntimeDeviceInfo {
+  const app = getApp<{ globalData?: { deviceInfo?: RuntimeDeviceInfo } }>();
+  return (app.globalData && app.globalData.deviceInfo) || getRuntimeDeviceInfo();
+}
+
 export function formatRuntimePlatform(info: RuntimeDeviceInfo): string {
   if (info.platform === "harmonyos") return "HarmonyOS";
   if (info.platform === "ios") return "iOS";

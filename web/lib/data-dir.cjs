@@ -29,9 +29,7 @@ function ensureWritable(dir = DATA_DIR) {
 }
 
 module.exports = {
-  APP_DIR,
   DATA_DIR,
-  DEFAULT_DATA_DIR,
   ensureWritable,
   isInsideAppDir
 };

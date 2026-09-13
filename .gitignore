@@ -21,6 +21,9 @@ outputs/ml-*
 # Node
 *.lock
 
+# 工具缓存
+.rumdl_cache/
+
 .workbuddy
 miniprogram_npm
 node_modules

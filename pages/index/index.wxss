@@ -60,8 +60,7 @@
   line-height: 1.6;
 }
 
-.login-btn,
-.enter-btn {
+.login-btn {
   width: 100%;
   padding: 18rpx 24rpx;
   background: #1f6feb;
@@ -141,10 +140,6 @@
   font-weight: 800;
   word-break: break-word;
   overflow-wrap: anywhere;
-}
-
-.enter-btn {
-  margin-top: 24rpx;
 }
 
 .course-section {
@@ -280,8 +275,7 @@
     grid-template-columns: 1fr;
   }
 
-  .login-btn,
-  .enter-btn {
+  .login-btn {
     padding: 16rpx 20rpx;
   }
 }

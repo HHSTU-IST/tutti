@@ -1,9 +1,9 @@
 export { };
 
-import { RuntimeDeviceInfo, formatRuntimePlatform, getRuntimeDeviceInfo } from "../../services/device";
+import { formatRuntimePlatform, getRuntimeDeviceInfo, resolveDeviceInfo } from "../../services/device";
 import { UserSession, resolveUserSession, restoreUserSession } from "../../services/purchase";
 import { CourseOption, listAgentCourses } from "../../services/registry";
-import { findMissingProductionConfig } from "../../services/runtime-config";
+import { MISSING_CONFIG_MESSAGE, hasMissingProductionConfig } from "../../services/runtime-config";
 
 type LoginState = "idle" | "loading" | "ready" | "denied";
 
@@ -15,13 +15,11 @@ interface CourseCard extends CourseOption {
 
 interface IndexData {
   loginState: LoginState;
-  wechatIdText: string;
   wechatIdDisplay: string;
   unlockedCount: number;
   courseList: CourseCard[];
   platformClass: string;
   platformText: string;
-  isHarmonyOS: boolean;
   statusText: string;
   isLoading: boolean;
 }
@@ -38,13 +36,11 @@ const DEFAULT_DEVICE_INFO = getRuntimeDeviceInfo();
 Page<IndexData, IndexPageInstance>({
   data: {
     loginState: "idle",
-    wechatIdText: "",
     wechatIdDisplay: "未读取",
     unlockedCount: 0,
     courseList: [],
     platformClass: DEFAULT_DEVICE_INFO.platformClass,
     platformText: formatRuntimePlatform(DEFAULT_DEVICE_INFO),
-    isHarmonyOS: DEFAULT_DEVICE_INFO.isHarmonyOS,
     statusText: "微信登录后自动读取购买状态",
     isLoading: false
   },
@@ -58,13 +54,11 @@ Page<IndexData, IndexPageInstance>({
   },
 
   refreshDeviceInfo() {
-    const app = getApp<{ globalData?: { deviceInfo?: RuntimeDeviceInfo } }>();
-    const deviceInfo = (app.globalData && app.globalData.deviceInfo) || getRuntimeDeviceInfo();
+    const deviceInfo = resolveDeviceInfo();
 
     this.setData({
       platformClass: deviceInfo.platformClass,
-      platformText: formatRuntimePlatform(deviceInfo),
-      isHarmonyOS: deviceInfo.isHarmonyOS
+      platformText: formatRuntimePlatform(deviceInfo)
     });
   },
 
@@ -81,7 +75,6 @@ Page<IndexData, IndexPageInstance>({
     if (!session) {
       this.setData({
         loginState: "denied",
-        wechatIdText: "",
         wechatIdDisplay: "未读取",
         unlockedCount: 0,
         courseList: buildCourseCards(null),
@@ -95,14 +88,12 @@ Page<IndexData, IndexPageInstance>({
   },
 
   applySession(session: UserSession) {
-    const wechatIdText = maskWechatId(session.wechatOpenId);
     const courseList = buildCourseCards(session);
     const unlockedCount = courseList.filter(course => course.unlocked).length;
 
     this.setData({
       loginState: "ready",
-      wechatIdText,
-      wechatIdDisplay: wechatIdText || "未读取",
+      wechatIdDisplay: maskWechatId(session.wechatOpenId) || "未读取",
       unlockedCount,
       courseList,
       statusText: unlockedCount ? `已开通 ${unlockedCount} 个题库` : "暂未开通任何题库",
@@ -148,7 +139,5 @@ function maskWechatId(openId: string): string {
 // 生产配置没填全时，真机上看到的「未读取到可用授权」会被误判成后台故障，
 // 这里换成指向配置的提示；具体缺哪项由 app.ts 打到开发者工具 console。
 function buildDeniedStatusText(): string {
-  return findMissingProductionConfig().length
-    ? "生产配置缺失，请联系管理员（详见开发者工具日志）"
-    : "未读取到可用授权";
+  return hasMissingProductionConfig() ? MISSING_CONFIG_MESSAGE : "未读取到可用授权";
 }

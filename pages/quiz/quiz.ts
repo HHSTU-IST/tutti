@@ -1,8 +1,8 @@
 export { };
 
-import { RuntimeDeviceInfo, getRuntimeDeviceInfo } from "../../services/device";
+import { getRuntimeDeviceInfo, resolveDeviceInfo } from "../../services/device";
 import { AgentKind, resolveUserSession } from "../../services/purchase";
-import { findMissingProductionConfig } from "../../services/runtime-config";
+import { MISSING_CONFIG_MESSAGE, hasMissingProductionConfig } from "../../services/runtime-config";
 import {
   AnswerStats,
   UserProfile,
@@ -86,16 +86,12 @@ interface QuizPageInstance {
   examIndex: number;
   refreshDeviceInfo(): void;
   goHome(): void;
-  switchCourse(): void;
   loadPurchasedAgent(): Promise<void>;
   loadCourse(kind: AgentKind, profile?: UserProfile | null): void;
   switchTopic(event: MiniProgramTapEvent<{ topic?: string }>): void;
   resetStats(): void;
   showErrors(): void;
-  makeTopicSingle(): void;
-  makeTopicJudge(): void;
-  makeRandomSingle(): void;
-  makeRandomJudge(): void;
+  makeQuestionByMode(event: MiniProgramTapEvent<{ mode?: string }>): void;
   startExam(): void;
   nextExamQuestion(): void;
   exportPaper(): void;
@@ -116,6 +112,10 @@ interface QuizPageInstance {
 
 function normalizeAnswerText(value: string): string {
   return String(value || "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
+function formatRateText(rightNum: number, totalNum: number): string {
+  return totalNum ? `${((rightNum / totalNum) * 100).toFixed(1)}%` : "0%";
 }
 
 const DEFAULT_BANK: QuizBank = getAgentBank("py") || {};
@@ -169,22 +169,14 @@ Page<QuizData, QuizPageInstance>({
   },
 
   refreshDeviceInfo() {
-    const app = getApp<{ globalData?: { deviceInfo?: RuntimeDeviceInfo } }>();
-    const deviceInfo = (app.globalData && app.globalData.deviceInfo) || getRuntimeDeviceInfo();
+    const deviceInfo = resolveDeviceInfo();
 
     this.setData({
       platformClass: deviceInfo.platformClass
     });
   },
 
-
   goHome() {
-    wx.redirectTo({
-      url: "/pages/index/index"
-    });
-  },
-
-  switchCourse() {
     wx.redirectTo({
       url: "/pages/index/index"
     });
@@ -195,8 +187,8 @@ Page<QuizData, QuizPageInstance>({
     if (!session) {
       this.setData({
         isReady: false,
-        readyMessage: findMissingProductionConfig().length
-          ? "生产配置缺失，请联系管理员（详见开发者工具日志）。"
+        readyMessage: hasMissingProductionConfig()
+          ? MISSING_CONFIG_MESSAGE
           : "未读取到题库授权，请返回首页完成微信扫码登录。"
       });
       return;
@@ -271,9 +263,7 @@ Page<QuizData, QuizPageInstance>({
       rightNum: snapshot.stats.rightNum,
       wrongNum: snapshot.stats.wrongNum,
       totalNum: snapshot.stats.totalNum,
-      rateText: snapshot.stats.totalNum
-        ? `${((snapshot.stats.rightNum / snapshot.stats.totalNum) * 100).toFixed(1)}%`
-        : "0%",
+      rateText: formatRateText(snapshot.stats.rightNum, snapshot.stats.totalNum),
       errorList: snapshot.wrongQuestions
     });
     this.updateComputedViewState();
@@ -338,36 +328,27 @@ Page<QuizData, QuizPageInstance>({
     this.updateComputedViewState();
   },
 
-  makeTopicSingle() {
-    this.setData({
-      selectedAction: "topic-single",
-      showErrorBook: false
-    });
-    this.makeQuestion("single", this.getQuestions(this.data.currentTopic, "single"));
-  },
+  // 四个出题入口只差「取题范围 × 题型」，统一按 data-mode 取参。
+  makeQuestionByMode(event: MiniProgramTapEvent<{ mode?: string }>) {
+    const mode = event.currentTarget.dataset.mode || "";
+    const modes: Record<string, { type: QuestionType; scope: "topic" | "all" }> = {
+      "topic-single": { type: "single", scope: "topic" },
+      "topic-judge": { type: "judge", scope: "topic" },
+      "random-single": { type: "single", scope: "all" },
+      "random-judge": { type: "judge", scope: "all" }
+    };
+    const selected = modes[mode];
+    if (!selected) return;
 
-  makeTopicJudge() {
-    this.setData({
-      selectedAction: "topic-judge",
-      showErrorBook: false
-    });
-    this.makeQuestion("judge", this.getQuestions(this.data.currentTopic, "judge"));
-  },
+    const questions = selected.scope === "topic"
+      ? this.getQuestions(this.data.currentTopic, selected.type)
+      : this.getAllQuestions(selected.type);
 
-  makeRandomSingle() {
     this.setData({
-      selectedAction: "random-single",
+      selectedAction: mode,
       showErrorBook: false
     });
-    this.makeQuestion("single", this.getAllQuestions("single"));
-  },
-
-  makeRandomJudge() {
-    this.setData({
-      selectedAction: "random-judge",
-      showErrorBook: false
-    });
-    this.makeQuestion("judge", this.getAllQuestions("judge"));
+    this.makeQuestion(selected.type, questions);
   },
 
   startExam() {
@@ -538,7 +519,7 @@ Page<QuizData, QuizPageInstance>({
     const rightNum = this.data.rightNum + (isCorrect ? 1 : 0);
     const wrongNum = this.data.wrongNum + (isCorrect ? 0 : 1);
     const totalNum = this.data.totalNum + 1;
-    const rateText = totalNum ? `${((rightNum / totalNum) * 100).toFixed(1)}%` : "0%";
+    const rateText = formatRateText(rightNum, totalNum);
     const topic = this.data.currentQuestion.topic;
 
     this.topicDone[topic] = (this.topicDone[topic] || 0) + 1;
