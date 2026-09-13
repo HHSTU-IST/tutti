@@ -6,13 +6,19 @@
   overflow-x: hidden;
 }
 
+/* 顶部卡片固定上下两段：课程信息在上占满整行，两个按钮另起一行、按内容宽居中。
+   （用 column 而不是给按钮行加 flex-basis: 100%：后者会和上面那块 flex: 1 1 0 抢同一行，
+   在窄屏上把标题挤没。） */
 .summary {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 20rpx;
   padding: 28rpx;
-  flex-wrap: wrap;
+}
+
+.summary-head {
+  min-width: 0;
 }
 
 .course-title {
@@ -24,21 +30,35 @@
 .summary-actions {
   display: flex;
   align-items: center;
-  gap: 14rpx;
-  flex-shrink: 0;
+  justify-content: center;
+  gap: 24rpx;
+  width: 100%;
+}
+
+/* 小程序原生 button 是「块级按钮」：默认 100% 宽、18px 字号、2.5555 行高、5px 圆角。
+   app.wxss 的全局规则只覆盖了 display / margin / border，**宽度收不回来**——
+   给 button 写 width: auto / flex: 0 0 auto 都压不住它那 100%。
+   所以「定宽」这件事交给外层 view：.summary-action 按内容定宽，按钮再 width: 100% 填满它，
+   这样不论原生那 100% 是否生效，看到的都是内容宽。 */
+.summary-action {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+/* 字号 / 行高 / 圆角同样要显式写，否则会拿到原生那套 18px + 2.5555 行高的"胖"按钮。 */
+.switch-btn,
+.reset-btn {
+  width: 100%;
+  padding: 16rpx 48rpx;
+  font-size: 28rpx;
+  line-height: 1.5;
+  border-radius: 8px;
 }
 
 .switch-btn {
-  min-width: 148rpx;
-  padding: 12rpx 18rpx;
   background: #eef4ff;
   color: #1f6feb;
   font-weight: 700;
-}
-
-.reset-btn {
-  min-width: 128rpx;
-  padding: 12rpx 18rpx;
 }
 
 .stats-grid {

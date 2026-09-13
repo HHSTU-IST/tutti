@@ -45,6 +45,12 @@
 
 答题页（`pages/quiz/`）的出题按钮区排在专题按钮上方：试卷练习、真题练习（占位，`showPendingMode()` 只给一句 toast，接真题题库时替换它）、专题单选 / 专题判断、随机单选 / 随机判断、错题本与导出同属一张卡片；**只有「专题单选 / 专题判断」这两种按专题出题的方式会显示「选择专题」卡片**（`data.showTopicPicker`，与 `TOPIC_SCOPED_ACTIONS` 对应），试卷练习与随机练习是整门课范围，不需要选专题。
 
+改这块 UI 时注意：小程序原生 `button` 是**块级按钮**——默认 100% 宽、`font-size: 18px`、`line-height: 2.5555`、`border-radius: 5px`。`app.wxss` 里的全局规则只覆盖了 `display` / `margin` / `border`，**宽度这条收不回来**：给 `button` 写 `width: auto` / `flex: 0 0 auto` 都压不住它那 100%（顶部卡片那两个按钮踩过：撑成各占半行并溢出卡片，还被 `.quiz-page` 的 `overflow-x: hidden` 裁掉两边）。
+
+要「按内容宽」就用**外层 view 定宽**：`.summary-action` 是 `display: flex; flex: 0 0 auto`（按内容定宽），里面的 button `width: 100%` 填满它——不论原生那 100% 生效与否结果都一样。要「按比例分」则让按钮直接 `flex: 1 1 0; min-width: 0`。两条路都比硬压 `width` 可靠。
+
+字号 / 行高 / 圆角也必须显式写，否则会拿到原生那套 18px + 2.5555 行高的"胖"按钮。顶部卡片布局：`.summary` 是 column，课程信息（`.summary-head`）占一行，`.summary-actions` 自己占一行、`justify-content: center` 居中。
+
 ### 已支持课程
 
 - [x] `py`：Python 编程

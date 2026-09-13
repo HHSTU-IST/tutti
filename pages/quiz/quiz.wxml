@@ -1,13 +1,17 @@
 <view class="page quiz-page {{platformClass}}">
   <block wx:if="{{isReady}}">
     <view class="summary card">
-      <view style="flex: 1 1 0; min-width: 0;">
+      <view class="summary-head">
         <view class="course-title">{{title}}</view>
         <view class="muted">当前专题：{{currentTopicName}}</view>
       </view>
       <view class="summary-actions">
-        <button class="switch-btn" bindtap="goHome">切换课程</button>
-        <button class="danger-btn reset-btn" bindtap="resetStats">重置</button>
+        <view class="summary-action">
+          <button class="switch-btn" bindtap="goHome">切换课程</button>
+        </view>
+        <view class="summary-action">
+          <button class="danger-btn reset-btn" bindtap="resetStats">重置</button>
+        </view>
       </view>
     </view>
 
