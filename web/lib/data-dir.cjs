@@ -2,12 +2,12 @@ const fs = require("fs");
 const path = require("path");
 
 // 运行期「可写」数据目录：会话文件、上传规则、学员作业都落在这里。
-// 注意与 web/data 下的构建产物（courses.json / banks/*.json）区分：后者只读，随发布覆盖。
+// 与题库、账号表（data/ 下的只读真源）分开：这份数据是运行期长出来的，不能跟着代码走。
 const APP_DIR = path.join(__dirname, "..");
 const DEFAULT_DATA_DIR = path.join(APP_DIR, "data");
 
-// 默认 web/data（发布沙箱只上传 web/，重新发布会连数据一起换掉）；
-// 部署时用 TUTTI_DATA_DIR 指向平台提供的持久化目录。
+// 默认落在 web/data：单机跑够用，但更新代码时容易被一并覆盖，
+// 长期使用或换机器时用 TUTTI_DATA_DIR 指到应用目录之外的固定位置。
 const DATA_DIR = path.resolve(process.env.TUTTI_DATA_DIR || DEFAULT_DATA_DIR);
 
 function isInsideAppDir(dir = DATA_DIR) {

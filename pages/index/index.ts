@@ -1,5 +1,3 @@
-export { };
-
 import { formatRuntimePlatform, getRuntimeDeviceInfo, resolveDeviceInfo } from "../../services/device";
 import { UserSession, resolveUserSession, restoreUserSession } from "../../services/purchase";
 import { CourseOption, listAgentCourses } from "../../services/registry";

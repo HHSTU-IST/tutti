@@ -1,5 +1,3 @@
-export { };
-
 import { getRuntimeDeviceInfo, resolveDeviceInfo } from "../../services/device";
 import { AgentKind, resolveUserSession } from "../../services/purchase";
 import { MISSING_CONFIG_MESSAGE, hasMissingProductionConfig } from "../../services/runtime-config";
