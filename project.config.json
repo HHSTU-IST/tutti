@@ -39,8 +39,48 @@
         "value": "docs"
       },
       {
+        "type": "folder",
+        "value": "web"
+      },
+      {
+        "type": "folder",
+        "value": "scripts"
+      },
+      {
+        "type": "folder",
+        "value": "prompts"
+      },
+      {
+        "type": "folder",
+        "value": ".venv"
+      },
+      {
+        "type": "folder",
+        "value": ".workbuddy"
+      },
+      {
         "type": "suffix",
         "value": ".ipynb"
+      },
+      {
+        "type": "suffix",
+        "value": ".py"
+      },
+      {
+        "type": "suffix",
+        "value": ".cjs"
+      },
+      {
+        "type": "suffix",
+        "value": ".md"
+      },
+      {
+        "type": "suffix",
+        "value": ".lock"
+      },
+      {
+        "type": "suffix",
+        "value": ".toml"
       }
     ],
     "include": []

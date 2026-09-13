@@ -41,26 +41,28 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 
 当前线上地址：<https://tutti-quiz-web2.app.workbuddy.host/>（在「设置—数据管理—应用」中管理）。历史链接 `tutti-quiz-web.app.workbuddy.link` 已下线失效。
 
-网页版部署清单（完整可勾选版见 `docs/web-deploy-checklist.md`）：
+网页版部署清单：
 
 - [ ] 改掉默认密码 `admin2026` / `demo2026`（`node scripts/manage-accounts.cjs passwd <账号> <新密码>`）
-- [ ] `data/accounts.json` 与 `web/data/accounts.json` 含账号哈希，且**目前已被 git 追踪**，须 `git rm --cached` 并补 `.gitignore`，别进公开仓库
+- [x] `data/accounts.json` 与 `web/data/accounts.json` 已 `git rm --cached` 并写入 `.gitignore`，账号盐值与哈希不再进公开仓库
 - [ ] 会话存在进程内存，重启会掉线；多实例部署要换成共享存储
 - [ ] `web/data/uploads/` 与 `web/data/upload-rules.json` 需要持久化，否则管理员设的上传规则会丢
+
+**回滚**：重新发布旧版 `web/` 目录即可回退代码；数据回滚先恢复 `data/accounts.json` 备份，再重跑 `node scripts/build-web-bundle.cjs`。
 
 ### 小程序部署
 
 1. 用**微信开发者工具**（稳定版）导入仓库根目录；`project.config.json` 里的 `appid` 目前是 `wxf7f1812c7c4f4106`，换成自己的需在微信公众平台注册后修改该字段。
 2. **本地调试**：把 `data/access.ts` 里要测的课程置为 `true`，开发者工具扫码登录即可进入（详见「扫码测试登录」）。
 3. **接后台授权**：填 `services/runtime-config.ts` 中 `PRODUCTION_RUNTIME_CONFIG.wechatLoginApiUrl`。**当前为空，不填线上会白屏**——这是发布前最容易被漏掉的一项。
-4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。`app.ts` 里 `wx.cloud.init()` 未指定 `env`，走默认环境；多环境需自行补 `env` 参数。
+4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。`app.ts` 的 `wx.cloud.init()` 默认走默认环境；多环境部署时在 `services/runtime-config.ts` 填 `cloudEnv` 指定环境 ID。
 5. **发布**：开发者工具右上角「上传」填版本号 → 微信公众平台「版本管理」提交审核 → 审核通过点「发布」。体验版（`envVersion=trial`）与正式版走同一套生产配置，可先拿它做真机验证。
 
-小程序发布清单（完整可勾选版见 `docs/miniprogram-release-checklist.md`）：
+小程序发布前自检：
 
-- [ ] `wechatLoginApiUrl` 已填且为 HTTPS
-- [ ] 云环境已建 `user_profiles` 集合
-- [ ] 生产开通由后台 `agents` 返回决定（本地测试开关是 `data/access.ts`；`data/access.json` 为遗留文件，代码不读）
+- [ ] `wechatLoginApiUrl` 已填且为 HTTPS（未填时启动会打印生产配置缺失告警）
+- [ ] 云环境已建 `user_profiles` 集合（多环境需填 `cloudEnv`）
+- [ ] 生产开通由后台 `agents` 返回决定（本地测试开关是 `data/access.ts`）
 - [ ] trial 体验版真机跑通再提审
 
 ## 使用说明
@@ -178,6 +180,14 @@ GET  /api/uploads           # 自己的上传记录；管理员看全部
 管理员在网页端「上传规则设置」面板里改，保存后对后续上传立即生效。前端只负责展示，真正的校验始终在服务端——改前端 JS 绕不过。上传文件落在 `web/data/uploads/`，记录在同目录 `index.json`。
 
 文件名还会挡掉 `../` 这类路径穿越写法，落盘时再按时间戳加随机前缀重命名，避免覆盖。
+
+### 已知限制
+
+- **会话存内存**：单进程 `Map`，重启即全员掉线，多实例不共享（要上多实例得换 Redis 之类共享存储）。
+- **上传文件落磁盘**：`web/data/uploads/`（作业）与 `web/data/upload-rules.json`（管理员规则）需持久化挂载，否则平台重启会丢。
+- **上传暂无删除接口**：管理端目前只能经 `/api/uploads` 查看；删文件需手动清理 `web/data/uploads/`（连同同目录 `index.json` 里的记录）。
+- **题型仅单/判/填**：判题引擎与构建脚本只覆盖这三种，新增题型需同时改 `services/quiz-engine.ts`、`web/lib/engine.cjs` 与 `scripts/build-web-bundle.cjs`。
+- **备份**：定期备份 `data/accounts.json`（账号与课程权限）和 `web/data/uploads/`（作业文件）。
 
 ### 账号管理
 
