@@ -1,123 +1,139 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>刷题助手 · 网页版</title>
-    <link rel="stylesheet" href="/style.css" />
-  </head>
-  <body>
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div class="brand">刷题助手</div>
-        <div class="user-area">
-          <span id="user-tag" class="tag" hidden></span>
-          <button id="logout-btn" class="link-btn" hidden>退出</button>
-        </div>
-      </div>
-    </header>
 
-    <main class="container">
-      <section id="login-view" class="card login-card">
-        <h1>登录</h1>
-        <p class="muted">题库权限由账号决定：已购课程可选，管理员可进入全部题库。</p>
-        <form id="login-form" autocomplete="off">
-          <label for="username">用户名</label>
-          <input id="username" name="username" type="text" required autofocus />
-          <label for="password">密码</label>
-          <input id="password" name="password" type="password" required />
-          <button type="submit" class="primary-btn">登录</button>
-          <p id="login-error" class="error" hidden></p>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f6fa" />
+  <title>刷题助手 · 网页版</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand" translate="no">刷题助手</div>
+      <div class="user-area">
+        <span id="user-tag" class="tag" hidden></span>
+        <button id="logout-btn" class="link-btn" type="button" hidden>退出</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="container" tabindex="-1">
+    <section id="login-view" class="card login-card">
+      <h1>登录</h1>
+      <p class="muted">题库权限由账号决定：已购课程可选，管理员可进入全部题库。</p>
+      <form id="login-form">
+        <label for="username">用户名</label>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none"
+          spellcheck="false" required />
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button id="login-btn" type="submit" class="primary-btn">登录</button>
+        <p id="login-error" class="error" role="status" aria-live="polite" tabindex="-1" hidden></p>
+      </form>
+    </section>
+
+    <section id="courses-view" hidden>
+      <div class="view-head">
+        <h1>选择题库</h1>
+        <p class="muted" id="courses-hint"></p>
+      </div>
+      <div id="course-grid" class="grid"></div>
+      <p id="courses-msg" class="error" role="status" aria-live="polite" hidden></p>
+
+      <section id="rules-panel" class="card rules-panel" hidden>
+        <h2>上传规则设置<span class="tag tag-admin" aria-hidden="true">仅管理员</span></h2>
+        <p class="muted">这些设置决定学员能上传什么格式、文件名必须长什么样。只有管理员能修改。</p>
+        <form id="rules-form">
+          <label for="rule-ext">允许的格式（英文逗号分隔）</label>
+          <input id="rule-ext" type="text" autocomplete="off" spellcheck="false" placeholder="例如 .pdf,.docx" />
+          <label for="rule-pattern">文件名规则（正则表达式）</label>
+          <input id="rule-pattern" type="text" autocomplete="off" spellcheck="false" translate="no"
+            placeholder="例如 ^[^_\\/]+_[^_\\/]+_[a-z]{2}\.(?:pdf|docx)$" />
+          <label for="rule-hint">命名说明（不匹配时提示给学员）</label>
+          <input id="rule-hint" type="text" autocomplete="off" placeholder="学号_姓名_课程代码，例如 2023010101_张三_py.pdf" />
+          <label for="rule-size">单个文件大小上限（MB）</label>
+          <input id="rule-size" type="number" inputmode="numeric" min="1" max="200" step="1" autocomplete="off"
+            placeholder="10" />
+          <button id="rules-btn" type="submit" class="primary-btn">保存规则</button>
+          <p id="rules-msg" class="error" role="status" aria-live="polite" hidden></p>
         </form>
       </section>
+    </section>
 
-      <section id="courses-view" hidden>
-        <div class="view-head">
-          <h1>选择题库</h1>
-          <p class="muted" id="courses-hint"></p>
+    <section id="topics-view" hidden>
+      <div class="view-head">
+        <button id="back-to-courses" class="link-btn" type="button">← 返回题库</button>
+        <h1 id="topics-title"></h1>
+      </div>
+      <div class="setup-row">
+        <span class="muted" id="count-label">题量</span>
+        <span id="count-chips" class="chip-group" role="group" aria-labelledby="count-label"></span>
+        <span class="muted" id="type-label">题型</span>
+        <span id="type-chips" class="chip-group" role="group" aria-labelledby="type-label"></span>
+      </div>
+      <div id="topic-list" class="grid"></div>
+      <p id="topics-msg" class="error" role="status" aria-live="polite" hidden></p>
+
+      <section class="card upload-panel">
+        <h2>作业上传</h2>
+        <p class="muted" id="upload-rules"></p>
+        <div class="fill-area">
+          <label class="sr-only" for="upload-input">选择作业文件</label>
+          <input id="upload-input" type="file" />
+          <button id="upload-btn" class="primary-btn" type="button">上传作业</button>
         </div>
-        <div id="course-grid" class="grid"></div>
-
-        <section id="rules-panel" class="card rules-panel" hidden>
-          <h2>上传规则设置<span class="tag tag-admin">仅管理员</span></h2>
-          <p class="muted">这些设置决定学员能上传什么格式、文件名必须长什么样。只有管理员能修改。</p>
-          <form id="rules-form">
-            <label for="rule-ext">允许的格式（英文逗号分隔）</label>
-            <input id="rule-ext" type="text" placeholder=".pdf,.docx" />
-            <label for="rule-pattern">文件名规则（正则表达式）</label>
-            <input id="rule-pattern" type="text" placeholder="^[^_\\/]+_[^_\\/]+_[a-z]{2}\.(?:pdf|docx)$" />
-            <label for="rule-hint">命名说明（不匹配时提示给学员）</label>
-            <input id="rule-hint" type="text" placeholder="学号_姓名_课程代码，例如 2023010101_张三_py.pdf" />
-            <label for="rule-size">单个文件大小上限（MB）</label>
-            <input id="rule-size" type="text" placeholder="10" />
-            <button type="submit" class="primary-btn">保存规则</button>
-            <p id="rules-msg" class="error" hidden></p>
-          </form>
-        </section>
+        <p id="upload-msg" class="error" role="status" aria-live="polite" hidden></p>
+        <ul id="upload-list" class="upload-list"></ul>
       </section>
+    </section>
 
-      <section id="topics-view" hidden>
-        <div class="view-head">
-          <button id="back-to-courses" class="link-btn">← 返回题库</button>
-          <h1 id="topics-title"></h1>
+    <section id="quiz-view" hidden>
+      <div class="view-head">
+        <button id="back-to-topics" class="link-btn" type="button">← 返回专题</button>
+        <div class="progress-wrap">
+          <div id="progress-bar" class="progress-bar" role="progressbar" aria-label="练习进度" aria-valuemin="0"
+            aria-valuemax="0" aria-valuenow="0">
+            <div id="progress-fill"></div>
+          </div>
+          <span id="progress-text" class="muted"></span>
         </div>
-        <div class="setup-row">
-          <span class="muted">题量</span>
-          <span id="count-chips" class="chip-group"></span>
-          <span class="muted">题型</span>
-          <span id="type-chips" class="chip-group"></span>
+      </div>
+
+      <div id="question-card" class="card">
+        <div class="question-meta">
+          <span id="q-type" class="tag"></span>
+          <span id="q-topic" class="tag tag-soft"></span>
         </div>
-        <div id="topic-list" class="grid"></div>
-
-        <section class="card upload-panel">
-          <h2>作业上传</h2>
-          <p class="muted" id="upload-rules"></p>
-          <div class="fill-area">
-            <input id="upload-input" type="file" />
-            <button id="upload-btn" class="primary-btn">上传</button>
-          </div>
-          <p id="upload-msg" class="error" hidden></p>
-          <ul id="upload-list" class="upload-list"></ul>
-        </section>
-      </section>
-
-      <section id="quiz-view" hidden>
-        <div class="view-head">
-          <button id="back-to-topics" class="link-btn">← 返回专题</button>
-          <div class="progress-wrap">
-            <div class="progress-bar"><div id="progress-fill"></div></div>
-            <span id="progress-text" class="muted"></span>
-          </div>
+        <p id="q-text" class="question-text"></p>
+        <div id="q-options" class="options"></div>
+        <div id="q-fill" class="fill-area" hidden>
+          <label class="sr-only" for="fill-input">答案</label>
+          <input id="fill-input" type="text" autocomplete="off" spellcheck="false" placeholder="请输入答案…" />
+          <button id="fill-submit" class="primary-btn" type="button">提交</button>
         </div>
-
-        <div id="question-card" class="card">
-          <div class="question-meta">
-            <span id="q-type" class="tag"></span>
-            <span id="q-topic" class="tag tag-soft"></span>
-          </div>
-          <p id="q-text" class="question-text"></p>
-          <div id="q-options" class="options"></div>
-          <div id="q-fill" class="fill-area" hidden>
-            <input id="fill-input" type="text" placeholder="请输入答案" />
-            <button id="fill-submit" class="primary-btn">提交</button>
-          </div>
-          <div id="q-result" class="result" hidden></div>
-          <div class="actions">
-            <button id="next-btn" class="primary-btn" hidden>下一题</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="summary-view" class="card" hidden>
-        <h1>练习完成</h1>
-        <p id="summary-text" class="summary-score"></p>
+        <div id="q-result" class="result" role="status" aria-live="polite" hidden></div>
         <div class="actions">
-          <button id="retry-btn" class="primary-btn">再练一次</button>
-          <button id="finish-btn" class="ghost-btn">返回专题</button>
+          <button id="next-btn" class="primary-btn" type="button" hidden>下一题</button>
         </div>
-      </section>
-    </main>
+      </div>
+    </section>
 
-    <script src="/app.js"></script>
-  </body>
+    <section id="summary-view" class="card summary-card" hidden>
+      <h1>练习完成</h1>
+      <p id="summary-text" class="summary-score"></p>
+      <div class="actions">
+        <button id="retry-btn" class="primary-btn" type="button">再练一次</button>
+        <button id="finish-btn" class="ghost-btn" type="button">返回专题</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+
 </html>
