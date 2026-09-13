@@ -130,7 +130,9 @@ function main() {
 
   if (command === "courses") {
     const [username, raw] = rest;
-    const user = auth.findUser(username);
+    // 必须在 main() 已读入的 accounts.users 里定位，才能保证修改被 save 落盘；
+    // auth.findUser 会重新读文件返回游离对象，改它不会写回。
+    const user = accounts.users.find(item => item.username === String(username || "").trim()) || null;
     if (!user) {
       console.error(`账号不存在: ${username}`);
       process.exitCode = 1;
@@ -149,7 +151,9 @@ function main() {
 
   if (command === "passwd") {
     const [username, password] = rest;
-    const user = auth.findUser(username);
+    // 必须在 main() 已读入的 accounts.users 里定位，才能保证修改被 save 落盘；
+    // auth.findUser 会重新读文件返回游离对象，改它不会写回。
+    const user = accounts.users.find(item => item.username === String(username || "").trim()) || null;
     if (!user || !password) {
       usage();
       process.exitCode = 1;
