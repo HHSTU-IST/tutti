@@ -13,6 +13,23 @@ const MAX_BODY_BYTES = 1024 * 1024;
 // 上传走 base64，体积会膨胀约 1/3，单独放宽上限。
 const UPLOAD_BODY_LIMIT = 25 * 1024 * 1024;
 
+// 登录失败限流：按「IP + 用户名」计数，连续失败超过阈值后短时锁定，防爆破。
+const LOGIN_FAIL_LIMIT = 5;
+const LOGIN_LOCK_MS = 60 * 1000;
+const loginFailures = new Map();
+
+function clientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) return String(forwarded).split(",")[0].trim();
+  return req.socket.remoteAddress || "unknown";
+}
+
+function pruneLoginFailures(now) {
+  loginFailures.forEach((record, key) => {
+    if (now - record.lastAttempt >= LOGIN_LOCK_MS) loginFailures.delete(key);
+  });
+}
+
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -75,12 +92,22 @@ function canAccess(session, courseId) {
 
 function handleLogin(req, res, body) {
   const username = String(body.username || "").trim();
-  const user = auth.findUser(username);
+  const key = `${clientIp(req)}:${username}`;
+  const now = Date.now();
+  pruneLoginFailures(now);
 
+  const failure = loginFailures.get(key);
+  if (failure && failure.count >= LOGIN_FAIL_LIMIT && now - failure.lastAttempt < LOGIN_LOCK_MS) {
+    return sendJson(res, 429, { error: "尝试次数过多，请稍后再试" });
+  }
+
+  const user = auth.findUser(username);
   if (!user || !auth.verifyPassword(user, String(body.password || ""))) {
+    loginFailures.set(key, { count: (failure ? failure.count : 0) + 1, lastAttempt: now });
     return sendJson(res, 401, { error: "用户名或密码错误" });
   }
 
+  loginFailures.delete(key);
   const token = auth.createSession(user);
   const session = auth.getSession(token);
   res.writeHead(200, {
@@ -211,11 +238,19 @@ function handleUpload(session, body) {
   const courseId = String(body.courseId || "");
   if (!canAccess(session, courseId)) return { status: 403, payload: { error: "该课程尚未开通" } };
 
-  if (typeof body.contentBase64 !== "string" || !body.contentBase64) {
+  if (typeof body.contentBase64 !== "string" || !body.contentBase64.trim()) {
     return { status: 400, payload: { error: "缺少文件内容" } };
   }
 
-  const content = Buffer.from(body.contentBase64, "base64");
+  const contentBase64 = body.contentBase64.trim();
+  if (contentBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64)) {
+    return { status: 400, payload: { error: "文件内容不是合法的 base64 编码" } };
+  }
+
+  const content = Buffer.from(contentBase64, "base64");
+  if (!content.length) {
+    return { status: 400, payload: { error: "文件内容为空" } };
+  }
 
   try {
     const record = uploadRules.saveUpload({
@@ -295,10 +330,17 @@ async function handleApi(req, res, pathname, body) {
 }
 
 function serveStatic(req, res, pathname) {
-  const relative = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
-  const filePath = path.join(PUBLIC_DIR, relative);
+  let relative;
+  try {
+    relative = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
+  } catch (error) {
+    return sendJson(res, 400, { error: "请求路径编码不合法" });
+  }
 
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  const filePath = path.join(PUBLIC_DIR, relative);
+  const rel = path.relative(PUBLIC_DIR, filePath);
+
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
     res.writeHead(403);
     return res.end("Forbidden");
   }

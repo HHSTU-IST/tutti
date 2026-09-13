@@ -12,6 +12,7 @@ const ACCOUNTS_PATH = process.env.TUTTI_ACCOUNTS_PATH
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PBKDF2_ITERATIONS = 120000;
 const SESSION_COOKIE = "sid";
+const COOKIE_SECURE = !(process.env.TUTTI_COOKIE_SECURE === "0" || String(process.env.TUTTI_COOKIE_SECURE).toLowerCase() === "false");
 
 const sessions = new Map();
 const VALID_COURSE_IDS = catalog.map(course => course.id);
@@ -117,11 +118,11 @@ function parseCookies(header) {
 }
 
 function sessionCookie(token, maxAgeSeconds) {
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${COOKIE_SECURE ? "; Secure" : ""}`;
 }
 
 function expiredCookie() {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${COOKIE_SECURE ? "; Secure" : ""}`;
 }
 
 module.exports = {

@@ -4,6 +4,10 @@
 // normalizeQuestion 结果，防止两边逻辑漂移。
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
+function makeQuestionId(topic) {
+  return `${topic}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function shuffle(list) {
   const result = list.slice();
   for (let index = result.length - 1; index > 0; index -= 1) {
@@ -31,7 +35,7 @@ function normalizeQuestion(question, type, topicName, fallbackTopic = "") {
   if (type === "judge") {
     const correctAnswer = question.answer ? "A" : "B";
     return {
-      id: `${topic}-${Date.now()}`,
+      id: makeQuestionId(topic),
       topic,
       topicName,
       type,
@@ -48,15 +52,15 @@ function normalizeQuestion(question, type, topicName, fallbackTopic = "") {
 
   if (type === "fill") {
     return {
-      id: `${topic}-${Date.now()}`,
+      id: makeQuestionId(topic),
       topic,
       topicName,
       type,
       typeName: "填空题",
       difficulty,
       question: question.question,
-      correctAnswer: "A",
-      options: [{ value: "A", text: String(question.answer), isCorrect: true }]
+      correctAnswer: String(question.answer),
+      options: []
     };
   }
 
@@ -66,7 +70,7 @@ function normalizeQuestion(question, type, topicName, fallbackTopic = "") {
   const correctAnswer = LETTERS[correctIndex] || "A";
 
   return {
-    id: `${topic}-${Date.now()}`,
+    id: makeQuestionId(topic),
     topic,
     topicName,
     type,

@@ -6,9 +6,9 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。
 
 - **框架**: 微信小程序原生框架
 - **页面**: WXML + WXSS + TypeScript
-- **题库**: 本地 `data/topic-*.ts`（`py` / `al` / `ml` / `cv`），全部内置于同一小程序
+- **题库**: 本地 `data/topic-*.ts`，全部内置于同一小程序
 - **题库类型**: 共享类型 `types/quiz-bank.ts`
-- **智能体开关**: 本地 `data/access.json`，生产默认全部为 `false`
+- **智能体开关**: 本地测试开关 `data/access.ts`，生产默认全部为 `false`（由后台 `agents` 决定）
 - **登录**: 仅支持微信登录，使用 `wx.login` 获取 code 后交给后台校验
 - **授权**: 后台根据用户购买情况返回可加载的刷题助手
 - **用户数据库**: 微信云数据库集合 `user_profiles`
@@ -56,11 +56,11 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。`app.ts` 里 `wx.cloud.init()` 未指定 `env`，走默认环境；多环境需自行补 `env` 参数。
 5. **发布**：开发者工具右上角「上传」填版本号 → 微信公众平台「版本管理」提交审核 → 审核通过点「发布」。体验版（`envVersion=trial`）与正式版走同一套生产配置，可先拿它做真机验证。
 
-小程序发布清单：
+小程序发布清单（完整可勾选版见 `docs/miniprogram-release-checklist.md`）：
 
 - [ ] `wechatLoginApiUrl` 已填且为 HTTPS
 - [ ] 云环境已建 `user_profiles` 集合
-- [ ] `data/access.json` 生产默认全 `false`（开通与否由后台 `agents` 返回决定）
+- [ ] 生产开通由后台 `agents` 返回决定（本地测试开关是 `data/access.ts`；`data/access.json` 为遗留文件，代码不读）
 - [ ] trial 体验版真机跑通再提审
 
 ## 使用说明
@@ -195,6 +195,8 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 
 默认账号（**上线前必须改密码**）：`admin / admin2026`（管理员，全部题库）、`demo / demo2026`（仅 `py`）。
 
+> 账号真源是 `data/accounts.json`，CLI 只改这一处；改完后重跑 `node scripts/build-web-bundle.cjs` 同步到 `web/data/accounts.json`，再重新发布才在线上生效（发布沙箱只上传 `web/`）。
+
 ### 接口
 
 | 方法    | 路径                      | 说明                            |
@@ -281,7 +283,7 @@ node --test scripts/web-api.test.cjs
 
 新增智能体时，需要同步增加：
 
-- `data/access.json` 中的默认开关
+- `data/access.ts` 中的本地测试开关（同时提供默认全 `false` map 的键列表）
 - 对应题库文件
 - `services/registry.ts` 中的智能体注册表
 
