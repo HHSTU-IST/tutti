@@ -1,6 +1,6 @@
 const data: import("../types/quiz-bank").QuizBank = {
     "_config": {
-        "title": "图像处理刷题助手",
+        "title": "图像处理课程",
         "topicOrder": [
             "base",
             "image",

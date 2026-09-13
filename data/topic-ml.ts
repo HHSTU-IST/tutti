@@ -1,6 +1,6 @@
 const data: import("../types/quiz-bank").QuizBank = {
     "_config": {
-        "title": "机器学习刷题助手",
+        "title": "机器学习课程",
         "topicOrder": [
             "base",
             "reg",

@@ -86,6 +86,29 @@ declare namespace wx {
     fail?(): void;
   }): void;
 
+  interface FileSystemManager {
+    writeFileSync(filePath: string, data: string, encoding?: string): void;
+  }
+
+  function getFileSystemManager(): FileSystemManager;
+
+  /** 小程序用户目录：要转发给好友的文件必须放在这里。 */
+  const env: {
+    USER_DATA_PATH: string;
+  };
+
+  /**
+   * 唤起「发送文件」面板，把文件转发给好友或文件传输助手。
+   * 基础库低的客户端没有这个接口，所以声明成可选，调用前要判一下。
+   */
+  const shareFileMessage: ((options: {
+    filePath: string;
+    fileName?: string;
+    success?(result: GeneralCallbackResult): void;
+    fail?(error: GeneralCallbackResult): void;
+    complete?(): void;
+  }) => void) | undefined;
+
   namespace cloud {
     function init(options?: { env?: string; traceUser?: boolean }): void;
     function database(): CloudDatabase;

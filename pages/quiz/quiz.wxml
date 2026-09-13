@@ -30,25 +30,10 @@
       </view>
     </view>
 
-    <view class="topic-grid">
-      <button wx:for="{{topics}}" wx:key="key" class="{{item.buttonClass}}" data-topic="{{item.key}}" bindtap="switchTopic">
-        {{item.name}}
-      </button>
-    </view>
-
-    <view class="progress card">
-      <view class="progress-head">
-        <view>{{currentTopicName}} 进度</view>
-        <view class="muted">{{progressText}}</view>
-      </view>
-      <view class="progress-track">
-        <view class="progress-bar" style="width: {{progressPercent}}%;"></view>
-      </view>
-    </view>
-
     <view class="actions card">
       <view class="mode-grid">
         <button class="plain-btn mode-btn {{selectedAction === 'exam' ? 'action-selected' : ''}}" bindtap="startExam">试卷练习</button>
+        <button class="plain-btn mode-btn pending" bindtap="showPendingMode">真题练习</button>
         <button class="plain-btn mode-btn {{selectedAction === 'topic-single' ? 'action-selected' : ''}}" data-mode="topic-single" bindtap="makeQuestionByMode">专题单选</button>
         <button class="plain-btn mode-btn {{selectedAction === 'topic-judge' ? 'action-selected' : ''}}" data-mode="topic-judge" bindtap="makeQuestionByMode">专题判断</button>
         <button class="plain-btn mode-btn {{selectedAction === 'random-single' ? 'action-selected' : ''}}" data-mode="random-single" bindtap="makeQuestionByMode">随机单选</button>
@@ -60,6 +45,25 @@
         <button class="ghost-btn error-btn" bindtap="exportPaper">导出试卷</button>
       </view>
       <view wx:if="{{examMode}}" class="exam-progress">试卷进度：{{examProgressText}}</view>
+    </view>
+
+    <view wx:if="{{showTopicPicker}}" class="topic-picker card">
+      <view class="panel-title">选择专题</view>
+      <view class="topic-grid">
+        <button wx:for="{{topics}}" wx:key="key" class="{{item.buttonClass}}" data-topic="{{item.key}}" bindtap="switchTopic">
+          {{item.name}}
+        </button>
+      </view>
+    </view>
+
+    <view class="progress card">
+      <view class="progress-head">
+        <view>{{currentTopicName}} 进度</view>
+        <view class="muted">{{progressText}}</view>
+      </view>
+      <view class="progress-track">
+        <view class="progress-bar" style="width: {{progressPercent}}%;"></view>
+      </view>
     </view>
 
     <view wx:if="{{showErrorBook}}" class="error-book card">
@@ -93,7 +97,7 @@
 
     <view wx:else class="empty-state card">
       <view class="panel-title">开始练习</view>
-      <view class="muted">先选择专题，再点击出题。</view>
+      <view class="muted">先选练习方式：「试卷练习」出一整份卷；「专题单选 / 专题判断」再选上方专题；「随机单选 / 随机判断」全课程随机抽题。</view>
     </view>
   </block>
 
