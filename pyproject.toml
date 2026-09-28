@@ -8,11 +8,6 @@ dependencies = [
   "defusedxml>=0.7.1",
 ]
 
-[project.optional-dependencies]
-dev = [
-  "ruff>=0.15.11",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -46,12 +41,11 @@ extend-select = [
 ]
 fixable = ["ALL"]
 ignore = [
-  "E501",
-  "ISC001",
   "RUF001",
   "RUF002",
   "RUF003",
   "S101",
+  "S310",
   "S603",
 ]
 
