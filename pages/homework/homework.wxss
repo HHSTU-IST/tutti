@@ -1,0 +1,97 @@
+.homework-page {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  gap: 22rpx;
+  background: #f4f7fb;
+}
+
+.hw-card {
+  padding: 28rpx;
+}
+
+.hw-title {
+  color: #101828;
+  font-size: 34rpx;
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.hw-rules {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 原生 button 是块级按钮：字号 / 行高 / 圆角必须显式写，否则会拿到 18px + 2.5555 行高那一套。 */
+.hw-upload,
+.hw-back {
+  width: 100%;
+  margin-top: 24rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 8px;
+  font-size: 30rpx;
+  line-height: 1.5;
+  font-weight: 800;
+}
+
+.hw-list-title {
+  color: #101828;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.hw-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-top: 18rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid #e0e7f1;
+}
+
+.hw-item-main {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.hw-item-name {
+  color: #172033;
+  font-size: 28rpx;
+  font-weight: 700;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.hw-item-meta {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+}
+
+.hw-remove {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  padding: 10rpx 22rpx;
+  border-radius: 8px;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.hw-empty {
+  margin-top: 18rpx;
+  font-size: 25rpx;
+  line-height: 1.6;
+}
+
+@media screen and (max-width: 360px) {
+  .hw-card {
+    padding: 22rpx;
+  }
+
+  .hw-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

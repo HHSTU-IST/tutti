@@ -35,20 +35,34 @@
     </view>
 
     <view class="actions card">
+      <view class="count-head">
+        <view class="count-title">题量</view>
+        <view class="count-hint muted">作用于「专题 / 随机」练习；「试卷练习」固定 20 单选 + 10 判断 + 10 填空。</view>
+      </view>
+      <view class="count-row">
+        <button class="count-btn {{questionCount === 1 ? 'active' : ''}}" data-count="1" bindtap="chooseCount">1 题</button>
+        <button class="count-btn {{questionCount === 10 ? 'active' : ''}}" data-count="10" bindtap="chooseCount">10 题</button>
+        <button class="count-btn {{questionCount === 20 ? 'active' : ''}}" data-count="20" bindtap="chooseCount">20 题</button>
+        <button class="count-btn {{questionCount === 30 ? 'active' : ''}}" data-count="30" bindtap="chooseCount">30 题</button>
+      </view>
+
       <view class="mode-grid">
         <button class="plain-btn mode-btn {{selectedAction === 'exam' ? 'action-selected' : ''}}" bindtap="startExam">试卷练习</button>
         <button class="plain-btn mode-btn pending" bindtap="showPendingMode">真题练习</button>
-        <button class="plain-btn mode-btn {{selectedAction === 'topic-single' ? 'action-selected' : ''}}" data-mode="topic-single" bindtap="makeQuestionByMode">专题单选</button>
-        <button class="plain-btn mode-btn {{selectedAction === 'topic-judge' ? 'action-selected' : ''}}" data-mode="topic-judge" bindtap="makeQuestionByMode">专题判断</button>
-        <button class="plain-btn mode-btn {{selectedAction === 'random-single' ? 'action-selected' : ''}}" data-mode="random-single" bindtap="makeQuestionByMode">随机单选</button>
-        <button class="plain-btn mode-btn {{selectedAction === 'random-judge' ? 'action-selected' : ''}}" data-mode="random-judge" bindtap="makeQuestionByMode">随机判断</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'topic-single' ? 'action-selected' : ''}}" data-mode="topic-single" bindtap="startPracticeByMode">专题单选</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'topic-judge' ? 'action-selected' : ''}}" data-mode="topic-judge" bindtap="startPracticeByMode">专题判断</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'topic-fill' ? 'action-selected' : ''}}" data-mode="topic-fill" bindtap="startPracticeByMode">专题填空</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'random-single' ? 'action-selected' : ''}}" data-mode="random-single" bindtap="startPracticeByMode">随机单选</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'random-judge' ? 'action-selected' : ''}}" data-mode="random-judge" bindtap="startPracticeByMode">随机判断</button>
+        <button class="plain-btn mode-btn {{selectedAction === 'random-fill' ? 'action-selected' : ''}}" data-mode="random-fill" bindtap="startPracticeByMode">随机填空</button>
       </view>
+
       <view class="export-row">
         <button class="ghost-btn error-btn {{selectedAction === 'errors' ? 'action-selected' : ''}}" bindtap="showErrors">错题本</button>
         <button class="ghost-btn error-btn" bindtap="exportErrors">导出错题本</button>
         <button class="ghost-btn error-btn" bindtap="exportPaper">导出试卷</button>
       </view>
-      <view wx:if="{{examMode}}" class="exam-progress">试卷进度：{{examProgressText}}</view>
+      <view wx:if="{{practiceActive}}" class="exam-progress">练习进度：{{practiceProgressText}}</view>
     </view>
 
     <view wx:if="{{showTopicPicker}}" class="topic-picker card">
@@ -70,12 +84,28 @@
       </view>
     </view>
 
-    <view wx:if="{{showErrorBook}}" class="error-book card">
+    <view wx:if="{{showSummary}}" class="result-summary card">
+      <view class="panel-title">{{summaryTitle}}</view>
+      <view class="summary-score">答对 {{summaryRight}} / {{summaryTotal}} 题 · 正确率 {{summaryRateText}}</view>
+      <view class="muted summary-note">本次答错 {{summaryWrong}} 题，可到「错题本」回看解析。</view>
+      <view class="result-actions">
+        <button class="primary-btn result-btn" bindtap="retryPractice">再练一次</button>
+        <button class="ghost-btn result-btn" bindtap="closeSummary">返回</button>
+      </view>
+    </view>
+
+    <view wx:elif="{{showErrorBook}}" class="error-book card">
       <view class="panel-title">错题本</view>
       <view wx:if="{{hasNoErrors}}" class="empty muted">当前还没有错题。</view>
       <view wx:for="{{errorList}}" wx:key="id" class="error-item">
         <rich-text nodes="{{item.question}}"></rich-text>
         <view class="answer-line">正确答案：{{item.answer}}</view>
+        <view wx:if="{{item.explain}}" class="explain-line">解析：{{item.explain}}</view>
+        <view class="error-remove-row">
+          <view class="error-remove-wrap">
+            <button class="ghost-btn error-remove" data-index="{{index}}" bindtap="removeErrorItem">移除</button>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -96,12 +126,12 @@
         <view class="analysis-title">{{analysisTitle}}</view>
         <rich-text nodes="{{explanation}}"></rich-text>
       </view>
-      <button wx:if="{{examMode && answered}}" class="primary-btn next-btn" bindtap="nextExamQuestion">下一题</button>
+      <button wx:if="{{practiceActive && answered}}" class="primary-btn next-btn" bindtap="nextPracticeQuestion">{{nextButtonText}}</button>
     </view>
 
     <view wx:else class="empty-state card">
       <view class="panel-title">开始练习</view>
-      <view class="muted">先选练习方式：「试卷练习」出一整份卷；「专题单选 / 专题判断」再选上方专题；「随机单选 / 随机判断」全课程随机抽题。</view>
+      <view class="muted">先选题量与练习方式：「试卷练习」出一整份卷；「专题单选 / 专题判断 / 专题填空」再选上方专题；「随机单选 / 随机判断 / 随机填空」全课程随机抽题。</view>
     </view>
   </block>
 

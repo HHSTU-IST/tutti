@@ -281,6 +281,20 @@ function handleUpload(session, body) {
   }
 }
 
+// 删上传记录：允许删自己的，管理员可删任何一条。越权与不存在的 id 分别返回 403 / 404。
+function handleDeleteUpload(session, id) {
+  try {
+    const upload = uploadRules.deleteUpload({
+      id,
+      username: session.username,
+      isAdmin: session.isAdmin
+    });
+    return { status: 200, payload: { ok: true, upload } };
+  } catch (error) {
+    return { status: error.status || 400, payload: { error: error.message } };
+  }
+}
+
 async function handleApi(req, res, pathname, body) {
   if (pathname === "/api/login" && req.method === "POST") {
     return handleLogin(req, res, body);
@@ -334,6 +348,14 @@ async function handleApi(req, res, pathname, body) {
     return sendJson(res, 200, {
       uploads: uploadRules.listUploads({ username: session.username, isAdmin: session.isAdmin })
     });
+  }
+
+  // 删一条上传记录：DELETE /api/uploads/<记录 id>。id 就是落盘文件名（时间戳-随机串-安全名），
+  // 所以不做字符白名单，只要求它不是带斜杠的多段路径。
+  const uploadMatch = /^\/api\/uploads\/([^/]+)$/.exec(pathname);
+  if (uploadMatch && req.method === "DELETE") {
+    const result = handleDeleteUpload(session, decodeURIComponent(uploadMatch[1]));
+    return sendJson(res, result.status, result.payload);
   }
 
   if (pathname === "/api/quiz" && req.method === "POST") {

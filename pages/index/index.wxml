@@ -11,14 +11,17 @@
     <view class="hero-title">专注练习、错题回看、进度追踪</view>
     <view class="hero-copy">全部课程题库已内置在本小程序，登录后按购买情况逐科开放。</view>
 
-    <button
-      class="login-btn"
-      loading="{{isLoading}}"
-      disabled="{{isLoading}}"
-      bindtap="handleWechatLogin"
-    >
-      微信登录
-    </button>
+    <view class="hero-actions">
+      <button
+        class="login-btn"
+        loading="{{isLoading}}"
+        disabled="{{isLoading}}"
+        bindtap="handleWechatLogin"
+      >
+        {{loginButtonText}}
+      </button>
+      <button wx:if="{{showLogout}}" class="logout-btn" bindtap="handleLogout">退出登录</button>
+    </view>
   </view>
 
   <view class="status card">
@@ -46,6 +49,7 @@
 
     <view wx:if="{{courseList.length}}" class="course-section">
       <view class="section-title">课程题库</view>
+      <view class="section-hint muted">未开通的课程请联系管理员开通，开通后点上方「刷新授权」即可进入，不用重新进入小程序。</view>
       <view
         wx:for="{{courseList}}"
         wx:key="id"
@@ -56,6 +60,14 @@
         <view class="course-main">
           <view class="course-name">{{item.title}}</view>
           <view class="course-meta">{{item.topicCount}} 个专题 · {{item.questionTotal}} 道题</view>
+          <view
+            wx:if="{{item.showHomework}}"
+            class="course-homework"
+            data-kind="{{item.id}}"
+            catchtap="openHomework"
+          >
+            上传作业
+          </view>
         </view>
         <view class="course-action">{{item.actionText}}</view>
       </view>
@@ -67,21 +79,21 @@
       <view class="feature-icon">题</view>
       <view>
         <view class="feature-title">随机出题</view>
-        <view class="feature-copy">按专题或随机抽取题目，选项自动打乱。</view>
+        <view class="feature-copy">按专题或随机抽取题目，题量可选，选项自动打乱。</view>
       </view>
     </view>
     <view class="feature card">
       <view class="feature-icon">错</view>
       <view>
         <view class="feature-title">错题记录</view>
-        <view class="feature-copy">错题写入用户档案，便于复盘。</view>
+        <view class="feature-copy">错题连同解析写入用户档案，可单条移除或导出复盘。</view>
       </view>
     </view>
     <view class="feature card">
       <view class="feature-icon">进</view>
       <view>
         <view class="feature-title">进度同步</view>
-        <view class="feature-copy">答题统计和专题进度随用户保存。</view>
+        <view class="feature-copy">答题统计、专题进度与正确率随用户保存。</view>
       </view>
     </view>
   </view>

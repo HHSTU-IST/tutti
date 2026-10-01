@@ -4,19 +4,18 @@ import { MISSING_CONFIG_MESSAGE, hasMissingProductionConfig } from "../../servic
 import {
   AnswerStats,
   UserProfile,
-  WrongQuestionRecord,
   applyUserQuizSnapshot,
   getOrCreateUserProfile,
   resetQuizSnapshot,
   saveQuizSnapshot
 } from "../../services/user-db";
 import {
-  AnswerValue,
+  PracticeSection,
   QuestionType,
   QuizBank,
   QuizQuestion,
-  RawQuestion,
-  TopicItem
+  TopicItem,
+  WrongQuestionEntry
 } from "../../types/quiz-bank";
 import {
   buildAgentTopics,
@@ -25,21 +24,18 @@ import {
   getAvailableAgentIds
 } from "../../services/registry";
 import {
+  buildPracticeQueue,
+  dedupeWrongQuestions,
   formatExplain,
-  getAllQuestions,
-  getQuestions,
-  normalizeQuestion,
-  pickRandom,
-  pickRandomMany
+  upsertWrongQuestion
 } from "../../services/quiz-engine";
 
-interface ErrorItem {
-  id: string;
-  question: string;
-  answer: string;
-  agent: AgentKind;
-  topic: string;
-  createdAt: number;
+type ErrorItem = WrongQuestionEntry;
+
+interface PracticePreset {
+  type: QuestionType;
+  scope: "topic" | "all";
+  label: string;
 }
 
 interface QuizData {
@@ -71,8 +67,16 @@ interface QuizData {
   hasNoErrors: boolean;
   showErrorBook: boolean;
   showTopicPicker: boolean;
-  examMode: boolean;
-  examProgressText: string;
+  questionCount: number;
+  practiceActive: boolean;
+  practiceProgressText: string;
+  nextButtonText: string;
+  showSummary: boolean;
+  summaryTitle: string;
+  summaryRight: number;
+  summaryTotal: number;
+  summaryWrong: number;
+  summaryRateText: string;
 }
 
 interface QuizPageInstance {
@@ -81,32 +85,41 @@ interface QuizPageInstance {
   userProfile: UserProfile | null;
   wechatOpenId: string;
   requestedKind: string;
-  examQuestions: QuizQuestion[];
-  examIndex: number;
+  practiceQuestions: QuizQuestion[];
+  practiceIndex: number;
+  practiceRight: number;
+  practiceModeKey: string;
+  practiceLabel: string;
   refreshDeviceInfo(): void;
   goHome(): void;
   loadPurchasedAgent(): Promise<void>;
   loadCourse(kind: AgentKind, profile?: UserProfile | null): void;
+  topicName(topicKey: string): string;
   switchTopic(event: MiniProgramTapEvent<{ topic?: string }>): void;
-  resetStats(): void;
-  showErrors(): void;
-  makeQuestionByMode(event: MiniProgramTapEvent<{ mode?: string }>): void;
-  showPendingMode(): void;
+  chooseCount(event: MiniProgramTapEvent<{ count?: string | number }>): void;
+  startPracticeByMode(event: MiniProgramTapEvent<{ mode?: string }>): void;
+  startPractice(modeKey: string): void;
   startExam(): void;
-  nextExamQuestion(): void;
+  launchPractice(modeKey: string, sections: PracticeSection[], topicKeys: string[], label: string): void;
+  nextPracticeQuestion(): void;
+  finishPractice(): void;
+  retryPractice(): void;
+  closeSummary(): void;
+  resetPracticeView(): void;
+  resetStats(): void;
+  applyReset(): void;
+  showErrors(): void;
+  showPendingMode(): void;
   exportPaper(): void;
   buildErrorBookMarkdown(): string;
   exportErrors(): void;
   copyErrorBook(markdown: string): void;
-  getQuestions(topicKey: string, type: QuestionType): RawQuestion[];
-  getAllQuestions(type: QuestionType): RawQuestion[];
-  makeQuestion(type: QuestionType, questions: RawQuestion[]): void;
-  showQuestion(currentQuestion: QuizQuestion, source?: RawQuestion): void;
-  normalizeQuestion(question: RawQuestion, type: QuestionType, topicName: string): QuizQuestion;
-  answerQuestion(event: MiniProgramTapEvent<{ value?: AnswerValue }>): void;
-  onFillInput(event: { detail: { value: string } }): void;
+  showQuestion(question: QuizQuestion): void;
+  answerQuestion(event: MiniProgramTapEvent<{ value?: string }>): void;
+  onFillInput(event: MiniProgramInputEvent): void;
   submitFillAnswer(): void;
   gradeAnswer(selectedAnswer: string): void;
+  removeErrorItem(event: MiniProgramTapEvent<{ index?: string | number }>): void;
   persistQuizSnapshot(errorList: ErrorItem[], stats: AnswerStats): void;
   updateProgress(): void;
   updateComputedViewState(): void;
@@ -134,11 +147,58 @@ function sanitizeFileName(value: string): string {
   return String(value || "").replace(/[\\/:*?"<>|]/g, "-").trim() || "错题本";
 }
 
+/**
+ * 错题本里要写「人话答案」：选项顺序每道题都会重排，只存 "A" 等于什么都没说。
+ * 判断题退化成「正确 / 错误」，单选题带上选项文本，填空题原本就是答案本身。
+ */
+function describeCorrectAnswer(question: QuizQuestion, correctAnswer: string): string {
+  if (question.type === "fill") return String(correctAnswer);
+
+  const option = question.options.find(item => item.value === correctAnswer);
+  if (!option) return String(correctAnswer);
+
+  return question.type === "judge" ? option.text : `${option.value}. ${option.text}`;
+}
+
+/** 填空题题库一般不写 explain，此时把参考答案当作解析，别让用户看到「暂无解析」。 */
+function resolveExplanation(question: QuizQuestion): string {
+  const raw = question.raw as { explain?: string; explanation?: string };
+  if (raw.explain || raw.explanation) return formatExplain(question.raw);
+  if (question.type === "fill") return `参考答案：${question.correctAnswer}`;
+
+  return "暂无解析。";
+}
+
 const DEFAULT_BANK: QuizBank = getAgentBank("py") || {};
 const DEFAULT_DEVICE_INFO = getRuntimeDeviceInfo();
+const QUESTION_COUNTS = [1, 10, 20, 30];
+const DEFAULT_QUESTION_COUNT = 10;
 
-// 只有「按专题出题」的两种方式需要先挑专题，试卷练习与随机练习都是整门课范围，不显示专题按钮。
-const TOPIC_SCOPED_ACTIONS = ["topic-single", "topic-judge"];
+// 出题入口只差「题型 × 抽题范围」两件事，抽多少题由题量选择统一决定。
+const PRACTICE_PRESETS: Record<string, PracticePreset> = {
+  "topic-single": { type: "single", scope: "topic", label: "专题单选" },
+  "topic-judge": { type: "judge", scope: "topic", label: "专题判断" },
+  "topic-fill": { type: "fill", scope: "topic", label: "专题填空" },
+  "random-single": { type: "single", scope: "all", label: "随机单选" },
+  "random-judge": { type: "judge", scope: "all", label: "随机判断" },
+  "random-fill": { type: "fill", scope: "all", label: "随机填空" }
+};
+
+const TYPE_LABELS: Record<QuestionType, string> = {
+  single: "单选题",
+  judge: "判断题",
+  fill: "填空题"
+};
+
+// 只有「按专题出题」的三种方式需要先挑专题，试卷练习与随机练习都是整门课范围。
+const TOPIC_SCOPED_ACTIONS = ["topic-single", "topic-judge", "topic-fill"];
+
+// 试卷练习的固定构成：整门课范围抽 20 单选 + 10 判断 + 10 填空。
+const EXAM_SECTIONS: PracticeSection[] = [
+  { type: "single", count: 20, label: "单选题" },
+  { type: "judge", count: 10, label: "判断题" },
+  { type: "fill", count: 10, label: "填空题" }
+];
 
 Page<QuizData, QuizPageInstance>({
   data: {
@@ -170,8 +230,16 @@ Page<QuizData, QuizPageInstance>({
     hasNoErrors: true,
     showErrorBook: false,
     showTopicPicker: false,
-    examMode: false,
-    examProgressText: ""
+    questionCount: DEFAULT_QUESTION_COUNT,
+    practiceActive: false,
+    practiceProgressText: "",
+    nextButtonText: "下一题",
+    showSummary: false,
+    summaryTitle: "",
+    summaryRight: 0,
+    summaryTotal: 0,
+    summaryWrong: 0,
+    summaryRateText: "0%"
   },
 
   bank: DEFAULT_BANK,
@@ -179,8 +247,11 @@ Page<QuizData, QuizPageInstance>({
   userProfile: null,
   wechatOpenId: "",
   requestedKind: "",
-  examQuestions: [],
-  examIndex: 0,
+  practiceQuestions: [],
+  practiceIndex: 0,
+  practiceRight: 0,
+  practiceModeKey: "",
+  practiceLabel: "",
 
   onLoad(options: Record<string, string | undefined>) {
     this.refreshDeviceInfo();
@@ -264,73 +335,240 @@ Page<QuizData, QuizPageInstance>({
     this.topicDone = topicDone;
     wx.setNavigationBarTitle({ title: course.title });
 
+    // 换课程要把上一门课没做完的练习彻底丢掉，否则「查看成绩」会读到旧队列。
+    this.resetPracticeView();
+
     this.setData({
       isReady: true,
       kind,
       title: course.title,
       topics,
       currentTopic,
-      currentQuestion: null,
-      selectedAnswer: "",
-      correctAnswer: "",
-      fillAnswer: "",
-      explanation: "",
-      analysisClass: "analysis",
-      analysisTitle: "",
-      answered: false,
-      isCorrect: false,
+      selectedAction: "",
       showErrorBook: false,
+      // 早先版本不去重，云端可能残留同一题的重复记录，进课时先收敛一次。
+      errorList: dedupeWrongQuestions(snapshot.wrongQuestions),
       rightNum: snapshot.stats.rightNum,
       wrongNum: snapshot.stats.wrongNum,
       totalNum: snapshot.stats.totalNum,
-      rateText: formatRateText(snapshot.stats.rightNum, snapshot.stats.totalNum),
-      errorList: snapshot.wrongQuestions
+      rateText: formatRateText(snapshot.stats.rightNum, snapshot.stats.totalNum)
     });
     this.updateComputedViewState();
+  },
+
+  topicName(topicKey: string): string {
+    const topic = this.data.topics.find(item => item.key === topicKey);
+    return topic ? topic.name : topicKey;
   },
 
   switchTopic(event: MiniProgramTapEvent<{ topic?: string }>) {
     const currentTopic = event.currentTarget.dataset.topic;
     if (!currentTopic) return;
 
+    this.resetPracticeView();
     this.setData({
       currentTopic,
-      currentQuestion: null,
-      showErrorBook: false,
-      examMode: false,
-      examProgressText: ""
+      showErrorBook: false
     });
     this.updateComputedViewState();
   },
 
-  resetStats() {
-    const topicDone: Record<string, number> = {};
-    this.data.topics.forEach(topic => {
-      topicDone[topic.key] = 0;
-    });
-    this.topicDone = topicDone;
+  chooseCount(event: MiniProgramTapEvent<{ count?: string | number }>) {
+    const count = Number(event.currentTarget.dataset.count);
+    if (QUESTION_COUNTS.indexOf(count) < 0) return;
+
+    this.setData({ questionCount: count });
+  },
+
+  startPracticeByMode(event: MiniProgramTapEvent<{ mode?: string }>) {
+    const mode = event.currentTarget.dataset.mode || "";
+    if (!PRACTICE_PRESETS[mode]) return;
+
+    this.startPractice(mode);
+  },
+
+  startPractice(modeKey: string) {
+    const preset = PRACTICE_PRESETS[modeKey];
+    if (!preset) return;
+
+    const topicKeys = preset.scope === "topic"
+      ? (this.data.currentTopic ? [this.data.currentTopic] : [])
+      : this.data.topics.map(topic => topic.key);
+
+    this.launchPractice(
+      modeKey,
+      [{ type: preset.type, count: this.data.questionCount, label: TYPE_LABELS[preset.type] }],
+      topicKeys,
+      preset.label
+    );
+  },
+
+  startExam() {
+    this.launchPractice(
+      "exam",
+      EXAM_SECTIONS,
+      this.data.topics.map(topic => topic.key),
+      "试卷练习"
+    );
+  },
+
+  launchPractice(modeKey: string, sections: PracticeSection[], topicKeys: string[], label: string) {
+    const { questions, shortfall } = buildPracticeQueue(
+      this.bank,
+      topicKeys,
+      sections,
+      topicKey => this.topicName(topicKey)
+    );
+
+    if (!questions.length) {
+      wx.showToast({
+        title: "该范围内暂无这种题型",
+        icon: "none"
+      });
+      return;
+    }
+
+    this.practiceQuestions = questions;
+    this.practiceIndex = 0;
+    this.practiceRight = 0;
+    this.practiceModeKey = modeKey;
+    this.practiceLabel = label;
+
     this.setData({
-      rightNum: 0,
-      wrongNum: 0,
-      totalNum: 0,
-      rateText: "0%",
-      errorList: [],
+      selectedAction: modeKey,
+      showErrorBook: false,
+      showSummary: false,
+      practiceActive: true
+    });
+    this.showQuestion(questions[0]);
+
+    // 抽不满时显式告知用户，避免误以为整份卷子是完整的。
+    if (shortfall.length) {
+      wx.showToast({
+        title: `题库不足：${shortfall.join("，")}`,
+        icon: "none",
+        duration: 3000
+      });
+    }
+  },
+
+  nextPracticeQuestion() {
+    if (!this.data.practiceActive || !this.data.answered) return;
+
+    const nextIndex = this.practiceIndex + 1;
+    if (nextIndex >= this.practiceQuestions.length) {
+      this.finishPractice();
+      return;
+    }
+
+    this.practiceIndex = nextIndex;
+    this.showQuestion(this.practiceQuestions[nextIndex]);
+  },
+
+  finishPractice() {
+    const total = this.practiceQuestions.length;
+    const right = this.practiceRight;
+
+    this.setData({
+      practiceActive: false,
+      showSummary: true,
+      showErrorBook: false,
       currentQuestion: null,
       selectedAnswer: "",
-      selectedAction: "",
+      fillAnswer: "",
+      answered: false,
+      isCorrect: false,
+      explanation: "",
+      analysisClass: "analysis",
+      analysisTitle: "",
+      summaryTitle: `${this.practiceLabel}完成`,
+      summaryRight: right,
+      summaryTotal: total,
+      summaryWrong: Math.max(0, total - right),
+      summaryRateText: formatRateText(right, total)
+    });
+    this.updateComputedViewState();
+  },
+
+  retryPractice() {
+    if (this.practiceModeKey === "exam") {
+      this.startExam();
+      return;
+    }
+
+    if (PRACTICE_PRESETS[this.practiceModeKey]) {
+      this.startPractice(this.practiceModeKey);
+      return;
+    }
+
+    this.closeSummary();
+  },
+
+  closeSummary() {
+    this.resetPracticeView();
+    this.updateComputedViewState();
+  },
+
+  // 把「正在进行的练习」整体清掉：换课程、换专题、重置、看完成绩都走这里，避免残留队列。
+  // 刻意不动 selectedAction——换专题或看完成绩后，当前练习方式的高亮与专题选择卡片应当还在，
+  // 用户不必为了再练一次重新点一遍出题按钮。换课程时由 loadCourse 显式清空。
+  resetPracticeView() {
+    this.practiceQuestions = [];
+    this.practiceIndex = 0;
+    this.practiceRight = 0;
+    this.practiceModeKey = "";
+    this.practiceLabel = "";
+
+    this.setData({
+      practiceActive: false,
+      practiceProgressText: "",
+      nextButtonText: "下一题",
+      showSummary: false,
+      currentQuestion: null,
+      selectedAnswer: "",
       correctAnswer: "",
       fillAnswer: "",
       explanation: "",
       analysisClass: "analysis",
       analysisTitle: "",
       answered: false,
-      isCorrect: false,
+      isCorrect: false
+    });
+  },
+
+  // 重置会连同云端记录一起清掉，属于不可恢复操作，先让用户确认一次。
+  resetStats() {
+    const wrongCount = this.data.errorList.length;
+    wx.showModal({
+      title: "重置练习数据",
+      content: `将清空《${this.data.title}》的答题统计、专题进度与 ${wrongCount} 道错题记录，且无法恢复。确定继续？`,
+      confirmText: "重置",
+      confirmColor: "#b42318",
+      success: result => {
+        if (result.confirm) this.applyReset();
+      }
+    });
+  },
+
+  applyReset() {
+    const topicDone: Record<string, number> = {};
+    this.data.topics.forEach(topic => {
+      topicDone[topic.key] = 0;
+    });
+    this.topicDone = topicDone;
+
+    this.resetPracticeView();
+    this.setData({
+      rightNum: 0,
+      wrongNum: 0,
+      totalNum: 0,
+      rateText: "0%",
+      errorList: [],
       hasNoErrors: true,
-      showErrorBook: false,
-      examMode: false,
-      examProgressText: ""
+      showErrorBook: false
     });
     this.updateComputedViewState();
+
     void resetQuizSnapshot(this.wechatOpenId, this.data.kind).catch(() => {
       wx.showToast({
         title: "重置失败，稍后再试",
@@ -342,36 +580,11 @@ Page<QuizData, QuizPageInstance>({
   showErrors() {
     this.setData({
       showErrorBook: true,
+      showSummary: false,
       currentQuestion: null,
       selectedAction: "errors"
     });
     this.updateComputedViewState();
-  },
-
-  // 四个出题入口只差「取题范围 × 题型」，统一按 data-mode 取参。
-  makeQuestionByMode(event: MiniProgramTapEvent<{ mode?: string }>) {
-    const mode = event.currentTarget.dataset.mode || "";
-    const modes: Record<string, { type: QuestionType; scope: "topic" | "all" }> = {
-      "topic-single": { type: "single", scope: "topic" },
-      "topic-judge": { type: "judge", scope: "topic" },
-      "random-single": { type: "single", scope: "all" },
-      "random-judge": { type: "judge", scope: "all" }
-    };
-    const selected = modes[mode];
-    if (!selected) return;
-
-    const questions = selected.scope === "topic"
-      ? this.getQuestions(this.data.currentTopic, selected.type)
-      : this.getAllQuestions(selected.type);
-
-    this.setData({
-      selectedAction: mode,
-      showErrorBook: false
-    });
-    // 先刷新一次视图状态：万一这门课没有该题型的题，makeQuestion 会直接 toast 返回，
-    // 那时专题按钮该显示也得显示（否则选中态和可见的按钮区对不上）。
-    this.updateComputedViewState();
-    this.makeQuestion(selected.type, questions);
   },
 
   // 占位入口（真题练习）：先把位置占住，别让一整行少一格；接了题库后换成真实出题逻辑。
@@ -382,75 +595,18 @@ Page<QuizData, QuizPageInstance>({
     });
   },
 
-  startExam() {
-    const sections: Array<[QuestionType, number, string]> = [
-      ["single", 20, "单选题"],
-      ["judge", 10, "判断题"],
-      ["fill", 10, "填空题"]
-    ];
-    const questions: QuizQuestion[] = [];
-    const shortfall: string[] = [];
-
-    sections.forEach(([type, count, label]) => {
-      const picked = pickRandomMany(this.getAllQuestions(type), count);
-      if (picked.length < count) {
-        shortfall.push(`${label}仅 ${picked.length}/${count} 题`);
-      }
-      picked.forEach(question => {
-        questions.push(this.normalizeQuestion(question, type, question.topic || ""));
-      });
-    });
-
-    if (!questions.length) {
-      wx.showToast({ title: "暂无足够题目", icon: "none" });
-      return;
-    }
-
-    this.examQuestions = questions;
-    this.examIndex = 0;
-    this.setData({
-      selectedAction: "exam",
-      showErrorBook: false,
-      examMode: true,
-      examProgressText: `1/${questions.length}`
-    });
-    this.showQuestion(questions[0]);
-
-    // pickRandomMany 会在题量不足时静默截断，这里显式告知用户，避免误以为试卷完整。
-    if (shortfall.length) {
-      wx.showToast({
-        title: `题库不足：${shortfall.join("，")}`,
-        icon: "none",
-        duration: 3000
-      });
-    }
-  },
-
-  nextExamQuestion() {
-    if (!this.data.examMode || !this.data.answered) return;
-    const nextIndex = this.examIndex + 1;
-    if (nextIndex >= this.examQuestions.length) {
-      wx.showToast({ title: "试卷已完成", icon: "success" });
-      this.setData({ examMode: false, examProgressText: "已完成" });
-      return;
-    }
-
-    this.examIndex = nextIndex;
-    this.setData({ examProgressText: `${nextIndex + 1}/${this.examQuestions.length}` });
-    this.showQuestion(this.examQuestions[nextIndex]);
-  },
-
   exportPaper() {
-    if (!this.examQuestions.length) {
-      wx.showToast({ title: "请先开始试卷练习", icon: "none" });
+    if (!this.practiceQuestions.length) {
+      wx.showToast({ title: "请先开始一次练习", icon: "none" });
       return;
     }
 
+    const label = this.practiceModeKey === "exam" ? "试卷" : "练习";
     const text = [
-      `《${this.data.title}》试卷`,
-      `共 ${this.examQuestions.length} 题`,
+      `《${this.data.title}》${label}`,
+      `共 ${this.practiceQuestions.length} 题`,
       "",
-      ...this.examQuestions.map((question, index) => {
+      ...this.practiceQuestions.map((question, index) => {
         const options = question.options.map(option => `(${option.value})${option.text}`).join(" ");
         return `${index + 1}. ${question.question}${options ? `\n${options}` : ""}`;
       })
@@ -480,6 +636,10 @@ Page<QuizData, QuizPageInstance>({
       lines.push("");
       lines.push(`**正确答案**：${item.answer}`);
       lines.push("");
+      if (item.explain) {
+        lines.push(`**解析**：${item.explain}`);
+        lines.push("");
+      }
     });
 
     // 最后一项已经补过空行，join 出来正好以换行收尾。
@@ -530,50 +690,24 @@ Page<QuizData, QuizPageInstance>({
     });
   },
 
-  getQuestions(topicKey: string, type: QuestionType): RawQuestion[] {
-    return getQuestions(this.bank, topicKey, type);
-  },
-
-  getAllQuestions(type: QuestionType): RawQuestion[] {
-    return getAllQuestions(this.bank, this.data.topics.map(topic => topic.key), type);
-  },
-
-  makeQuestion(type: QuestionType, questions: RawQuestion[]) {
-    if (!questions.length) {
-      wx.showToast({
-        title: "暂无题目",
-        icon: "none"
-      });
-      return;
-    }
-
-    const source = pickRandom(questions);
-    this.showQuestion(this.normalizeQuestion(source, type, source.topic || ""), source);
-  },
-
-  showQuestion(currentQuestion: QuizQuestion, source?: RawQuestion) {
-
+  showQuestion(question: QuizQuestion) {
     this.setData({
-      currentQuestion,
+      currentQuestion: question,
       selectedAnswer: "",
       fillAnswer: "",
-      correctAnswer: currentQuestion.correctAnswer,
-      explanation: formatExplain(source || currentQuestion.raw),
+      correctAnswer: question.correctAnswer,
+      explanation: resolveExplanation(question),
       analysisClass: "analysis",
       analysisTitle: "",
       answered: false,
       isCorrect: false,
-      showErrorBook: false
+      showErrorBook: false,
+      showSummary: false
     });
     this.updateComputedViewState();
   },
 
-  normalizeQuestion(question: RawQuestion, type: QuestionType, topicKey: string): QuizQuestion {
-    const topicName = this.data.topics.find(topic => topic.key === topicKey)?.name || this.data.currentTopicName;
-    return normalizeQuestion(question, type, topicName, topicKey);
-  },
-
-  onFillInput(event: { detail: { value: string } }) {
+  onFillInput(event: MiniProgramInputEvent) {
     this.setData({ fillAnswer: event.detail.value });
   },
 
@@ -586,7 +720,7 @@ Page<QuizData, QuizPageInstance>({
     this.gradeAnswer(selectedAnswer);
   },
 
-  answerQuestion(event: MiniProgramTapEvent<{ value?: AnswerValue }>) {
+  answerQuestion(event: MiniProgramTapEvent<{ value?: string }>) {
     const selectedAnswer = event.currentTarget.dataset.value;
     if (!selectedAnswer) return;
     this.gradeAnswer(selectedAnswer);
@@ -595,7 +729,8 @@ Page<QuizData, QuizPageInstance>({
   gradeAnswer(selectedAnswer: string) {
     if (this.data.answered || !this.data.currentQuestion) return;
 
-    const isCorrect = this.data.currentQuestion.type === "fill"
+    const question = this.data.currentQuestion;
+    const isCorrect = question.type === "fill"
       ? normalizeAnswerText(selectedAnswer) === normalizeAnswerText(String(this.data.correctAnswer))
       : selectedAnswer === this.data.correctAnswer;
 
@@ -603,21 +738,25 @@ Page<QuizData, QuizPageInstance>({
     const wrongNum = this.data.wrongNum + (isCorrect ? 0 : 1);
     const totalNum = this.data.totalNum + 1;
     const rateText = formatRateText(rightNum, totalNum);
-    const topic = this.data.currentQuestion.topic;
+    const topic = question.topic;
 
     this.topicDone[topic] = (this.topicDone[topic] || 0) + 1;
+    if (isCorrect) this.practiceRight += 1;
 
     const newError: ErrorItem = {
-      id: `${Date.now()}`,
-      question: this.data.currentQuestion.question,
-      answer: this.data.correctAnswer || "A",
+      // 题目 id 自带时间戳与随机后缀，拿它当错题 id 既唯一又不用再拼一次。
+      id: question.id,
       agent: this.data.kind,
       topic,
+      question: question.question,
+      answer: describeCorrectAnswer(question, this.data.correctAnswer),
+      explain: this.data.explanation,
       createdAt: Date.now()
     };
+    // 同一道题答错多次只留最新一条，否则错题本会被同一题刷屏。
     const errorList = isCorrect
       ? this.data.errorList
-      : [newError].concat(this.data.errorList);
+      : upsertWrongQuestion(this.data.errorList, newError);
 
     this.setData({
       selectedAnswer,
@@ -629,26 +768,38 @@ Page<QuizData, QuizPageInstance>({
       rateText,
       errorList,
       analysisClass: isCorrect ? "analysis right" : "analysis wrong",
-      analysisTitle: `${isCorrect ? "回答正确" : "回答错误"} · 正确答案：${this.data.correctAnswer}`
+      analysisTitle: `${isCorrect ? "回答正确" : "回答错误"} · 正确答案：${newError.answer}`
     });
     this.updateComputedViewState();
     this.persistQuizSnapshot(errorList, { rightNum, wrongNum, totalNum });
   },
 
-  persistQuizSnapshot(errorList: ErrorItem[], stats: AnswerStats) {
-    const wrongQuestions: WrongQuestionRecord[] = errorList.map(item => ({
-      id: item.id,
-      agent: item.agent,
-      topic: item.topic,
-      question: item.question,
-      answer: item.answer,
-      createdAt: item.createdAt
-    }));
+  // 按列表下标删，而不是按 id：云端存量记录早先用 Date.now() 当 id，理论上可能撞号，
+  // 按 id 过滤会一次删掉两条。下标在渲染时由 wx:for 提供，天然唯一。
+  removeErrorItem(event: MiniProgramTapEvent<{ index?: string | number }>) {
+    const index = Number(event.currentTarget.dataset.index);
+    if (!Number.isInteger(index) || index < 0 || index >= this.data.errorList.length) return;
 
+    const errorList = this.data.errorList.slice();
+    errorList.splice(index, 1);
+
+    this.setData({
+      errorList,
+      hasNoErrors: errorList.length === 0
+    });
+    // 错题本按「整份列表」覆盖写回，删掉的那条自然就没了。
+    this.persistQuizSnapshot(errorList, {
+      rightNum: this.data.rightNum,
+      wrongNum: this.data.wrongNum,
+      totalNum: this.data.totalNum
+    });
+  },
+
+  persistQuizSnapshot(errorList: ErrorItem[], stats: AnswerStats) {
     void saveQuizSnapshot(this.wechatOpenId, this.data.kind, {
       stats,
       topicDone: this.topicDone,
-      wrongQuestions
+      wrongQuestions: errorList
     }).catch(() => {
       wx.showToast({
         title: "同步失败，已保留当前答题结果",
@@ -706,11 +857,18 @@ Page<QuizData, QuizPageInstance>({
       }
       : null;
 
+    const practiceTotal = this.practiceQuestions.length;
+    const isLastQuestion = this.practiceIndex + 1 >= practiceTotal;
+
     this.setData({
       topics,
       currentQuestion,
       hasNoErrors: this.data.errorList.length === 0,
-      showTopicPicker: TOPIC_SCOPED_ACTIONS.includes(this.data.selectedAction)
+      showTopicPicker: TOPIC_SCOPED_ACTIONS.includes(this.data.selectedAction),
+      practiceProgressText: this.data.practiceActive && practiceTotal
+        ? `${Math.min(this.practiceIndex + 1, practiceTotal)}/${practiceTotal}`
+        : "",
+      nextButtonText: isLastQuestion ? "查看成绩" : "下一题"
     });
   }
 });

@@ -9,6 +9,7 @@ const { createReporter } = require("./check-report.cjs");
 const APP_DIR = path.join(__dirname, "..");
 const RUNTIME_CONFIG_PATH = path.join(APP_DIR, "services", "runtime-config.ts");
 const USER_DB_PATH = path.join(APP_DIR, "services", "user-db.ts");
+const HOMEWORK_PATH = path.join(APP_DIR, "services", "homework.ts");
 const PURCHASE_PATH = path.join(APP_DIR, "services", "purchase.ts");
 const ACCESS_PATH = path.join(APP_DIR, "data", "access.ts");
 const APP_TS_PATH = path.join(APP_DIR, "app.ts");
@@ -17,6 +18,7 @@ const PROJECT_CONFIG_PATH = path.join(APP_DIR, "project.config.json");
 const README_PATH = path.join(APP_DIR, "README.md");
 
 const USER_COLLECTION = "user_profiles";
+const HOMEWORK_COLLECTION = "homework_uploads";
 const CLOUD_FUNCTION_ROOT = "cloudfunctions";
 const LOGIN_FUNCTION_DIR = path.join(APP_DIR, CLOUD_FUNCTION_ROOT, "login");
 
@@ -38,6 +40,7 @@ const REQUIRED_IGNORES = [
 const MANUAL_ITEMS = [
   "trial 体验版真机跑通：上传 → 公众平台设为体验版 → 真机把登录、进入题库、答题、错题本各点一遍再提审",
   "云开发控制台已建集合 user_profiles，权限设为「仅创建者可读写」",
+  "开启作业上传时：云开发控制台另建集合 homework_uploads（权限「仅创建者可读写」），云存储权限保持「所有用户可读、仅创建者可写」",
   "cloudfunctions/login 已上传到云开发：开发者工具里右键该目录 →「上传并部署：云端安装依赖」",
   "学员的开通情况已在 user_profiles 里置好：把该用户文档的 agents.<课程> 改成 true（改完让学员重新登录）"
 ];
@@ -109,6 +112,14 @@ function checkProductionConfig() {
     config.enableCloudDatabase === true
       ? "enableCloudDatabase = true"
       : "enableCloudDatabase 不是 true：登录云函数调不到，答题统计与错题本也不会同步到 user_profiles"
+  );
+
+  report(
+    config.enableHomeworkUpload === true ? "ok" : "hint",
+    "作业上传开关",
+    config.enableHomeworkUpload === true
+      ? "生产启用作业上传：课程卡片会出现「上传作业」入口，前提是云开发里已建好集合与云存储权限"
+      : "生产未开启作业上传：首页与课程页都不显示作业入口（要开就把 enableHomeworkUpload 改成 true）"
   );
 
   if (!config.cloudEnv) {
@@ -203,6 +214,22 @@ function checkCloudDatabase() {
   );
 }
 
+// 作业上传是这轮补上的缺口：集合名要同时在代码、README 与自检脚本里对得上，
+// 否则学员传上去的记录会散在没人认得的集合里。
+function checkHomeworkUpload() {
+  const homework = readText(HOMEWORK_PATH);
+  const collectionOk = new RegExp(`const\\s+HOMEWORK_COLLECTION\\s*=\\s*"${HOMEWORK_COLLECTION}"`).test(homework);
+  const readmeOk = readText(README_PATH).includes(HOMEWORK_COLLECTION);
+
+  report(
+    collectionOk && readmeOk ? "ok" : "fail",
+    "作业上传集合名一致",
+    collectionOk && readmeOk
+      ? `services/homework.ts 与 README 都写着 ${HOMEWORK_COLLECTION}`
+      : "作业上传的集合名在 services/homework.ts 与 README 之间对不上，云开发控制台会不知道该建哪个集合"
+  );
+}
+
 function checkProject() {
   const project = readJson(PROJECT_CONFIG_PATH) || {};
   const appid = String(project.appid || "");
@@ -245,6 +272,7 @@ function runAllChecks() {
   checkAuthorizationSource();
   checkCloudFunction();
   checkCloudDatabase();
+  checkHomeworkUpload();
   checkProject();
   return reporter.results;
 }

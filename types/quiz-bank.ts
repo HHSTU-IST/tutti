@@ -65,6 +65,32 @@ export interface TopicItem {
   buttonClass: string;
 }
 
+/** 错题记录：小程序写进云数据库 `wrongQuestions` 的元素结构。 */
+export interface WrongQuestionEntry {
+  id: string;
+  agent: string;
+  topic: string;
+  question: string;
+  /** 正确答案的可读形式：判断题是「正确 / 错误」，单选题带上选项文本，填空题是答案本身。 */
+  answer: string;
+  /** 题目解析；填空题题库一般不写 explain，此时退化成参考答案。 */
+  explain?: string;
+  createdAt: number;
+}
+
+/** 练习队列的一段：某种题型抽多少道（试卷练习就是三段）。 */
+export interface PracticeSection {
+  type: QuestionType;
+  count: number;
+  label: string;
+}
+
+export interface PracticeQueue {
+  questions: QuizQuestion[];
+  /** 题量不足以凑满某一段时的说明，交给页面提示用户。 */
+  shortfall: string[];
+}
+
 export interface QuestionOption {
   value: AnswerValue;
   text: string;

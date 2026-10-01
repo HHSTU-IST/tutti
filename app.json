@@ -1,7 +1,8 @@
 {
   "pages": [
     "pages/index/index",
-    "pages/quiz/quiz"
+    "pages/quiz/quiz",
+    "pages/homework/homework"
   ],
   "window": {
     "navigationBarTitleText": "刷题助手",

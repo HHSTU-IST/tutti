@@ -11,13 +11,18 @@ const RUNTIME_CONFIG_PATH = path.join(__dirname, "../services/runtime-config.ts"
 // 小程序端没有可以在这里跑的编译步骤，用 Node 自带的 TS 解析兜住语法/类型标注写错。
 const MINIPROGRAM_SOURCES = [
   "app.ts",
+  "pages/homework/homework.ts",
   "pages/index/index.ts",
   "pages/quiz/quiz.ts",
   "services/device.ts",
+  "services/homework.ts",
   "services/purchase.ts",
   "services/registry.ts",
   "services/runtime-config.ts",
-  "services/user-db.ts"
+  "services/upload-rules.ts",
+  "services/user-db.ts",
+  "types/homework.ts",
+  "types/quiz-bank.ts"
 ];
 
 function levelsByTitle() {
@@ -41,6 +46,7 @@ test("生产登录走云函数：函数名与云函数目录都在", () => {
 test("云数据库与授权来源自检项通过", () => {
   const levels = levelsByTitle();
   assert.equal(levels["云数据库集合名一致"], "ok");
+  assert.equal(levels["作业上传集合名一致"], "ok");
   assert.equal(levels["启动时初始化云环境"], "ok");
   assert.equal(levels["生产授权走登录云函数"], "ok");
   assert.equal(levels["页面文件齐全"], "ok");
@@ -54,6 +60,7 @@ test("parseRuntimeConfigBlock 能读到生产配置的字段", () => {
   assert.equal(typeof config.loginFunctionName, "string");
   assert.equal(config.enableLocalWechatTestLogin, false);
   assert.equal(config.enableCloudDatabase, true);
+  assert.equal(config.enableHomeworkUpload, true, "生产要开着作业上传，否则线上没有作业入口");
   assert.equal(typeof config.cloudEnv, "string");
 });
 
@@ -74,7 +81,7 @@ test("小程序 TypeScript 文件语法可解析", () => {
 test("wxml 绑定的事件在对应页面里都有实现方法", () => {
   const missing = [];
 
-  ["index/index", "quiz/quiz"].forEach(page => {
+  ["homework/homework", "index/index", "quiz/quiz"].forEach(page => {
     const wxml = fs.readFileSync(path.join(__dirname, `../pages/${page}.wxml`), "utf8");
     const source = fs.readFileSync(path.join(__dirname, `../pages/${page}.ts`), "utf8");
     const handlers = Array.from(

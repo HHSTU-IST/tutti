@@ -1,0 +1,37 @@
+<view class="page homework-page {{platformClass}}">
+  <block wx:if="{{isReady}}">
+    <view class="hw-card card">
+      <view class="hw-title">{{title}} · 上传作业</view>
+      <view class="hw-rules muted">{{rulesText}}</view>
+      <view wx:if="{{filenameHint}}" class="hw-rules muted">命名要求：{{filenameHint}}</view>
+      <button
+        class="hw-upload primary-btn"
+        loading="{{uploading}}"
+        disabled="{{uploading}}"
+        bindtap="chooseHomeworkFile"
+      >
+        {{uploading ? "上传中…" : "选择文件并上传"}}
+      </button>
+    </view>
+
+    <view class="hw-card card">
+      <view class="hw-list-title">我的上传</view>
+      <block wx:if="{{hasUploads}}">
+        <view wx:for="{{uploads}}" wx:key="id" class="hw-item">
+          <view class="hw-item-main">
+            <view class="hw-item-name">{{item.name}}</view>
+            <view class="hw-item-meta muted">{{item.sizeText}} · {{item.timeText}}</view>
+          </view>
+          <button class="ghost-btn hw-remove" data-index="{{index}}" bindtap="removeUpload">删除</button>
+        </view>
+      </block>
+      <view wx:else class="hw-empty muted">还没有上传记录。文件只能从聊天记录里选：先把作业发给「文件传输助手」，再回到这里选择。</view>
+    </view>
+  </block>
+
+  <view wx:else class="hw-card card">
+    <view class="hw-title">暂时不能上传</view>
+    <view class="hw-rules muted">{{readyMessage}}</view>
+    <button class="ghost-btn hw-back" bindtap="back">返回</button>
+  </view>
+</view>
