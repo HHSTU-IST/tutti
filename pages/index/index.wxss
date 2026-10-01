@@ -60,12 +60,34 @@
   line-height: 1.6;
 }
 
-.login-btn {
+/* 字号 / 行高 / 圆角必须显式写：原生 button 那套 18px + 2.5555 行高会让顶部两个按钮
+   一个"胖"一个"瘦"，看起来像没对齐。 */
+.login-btn,
+.logout-btn {
   width: 100%;
+  border-radius: 8px;
+  font-size: 30rpx;
+  line-height: 1.5;
   padding: 18rpx 24rpx;
+}
+
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.login-btn {
   background: #1f6feb;
   color: #ffffff;
   font-weight: 800;
+}
+
+.logout-btn {
+  background: transparent;
+  border: 1rpx solid #46536b;
+  color: #d6deea;
+  font-weight: 700;
 }
 
 .status {
@@ -153,6 +175,12 @@
   font-weight: 800;
 }
 
+.section-hint {
+  margin-bottom: 16rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
 .course-card {
   display: flex;
   align-items: center;
@@ -191,6 +219,18 @@
   margin-top: 6rpx;
   color: #667085;
   font-size: 24rpx;
+}
+
+/* 作业入口在课程卡片内部，用 catchtap 拦住冒泡，别顺带触发「进入练习」。 */
+.course-homework {
+  display: inline-block;
+  margin-top: 14rpx;
+  padding: 8rpx 18rpx;
+  border: 1rpx solid #1f6feb;
+  border-radius: 999rpx;
+  color: #1f6feb;
+  font-size: 23rpx;
+  font-weight: 700;
 }
 
 .course-action {

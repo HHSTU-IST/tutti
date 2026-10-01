@@ -259,6 +259,12 @@ function renderUploadHint() {
   el("upload-rules").textContent = parts.join(" · ");
 }
 
+function formatSize(sizeBytes) {
+  return sizeBytes >= 1024 * 1024
+    ? `${(sizeBytes / 1024 / 1024).toFixed(1)}\u00A0MB`
+    : `${Math.max(1, Math.round(sizeBytes / 1024))}\u00A0KB`;
+}
+
 function renderUploads(uploads) {
   if (!uploads.length) {
     const empty = document.createElement("li");
@@ -271,13 +277,35 @@ function renderUploads(uploads) {
   el("upload-list").replaceChildren(
     ...uploads.map(upload => {
       const item = document.createElement("li");
-      const size = upload.sizeBytes >= 1024 * 1024
-        ? `${(upload.sizeBytes / 1024 / 1024).toFixed(1)}\u00A0MB`
-        : `${Math.max(1, Math.round(upload.sizeBytes / 1024))}\u00A0KB`;
-      item.textContent = `${upload.originalName} · ${size} · ${dateTimeFormatter.format(new Date(upload.uploadedAt))}`;
+
+      const text = document.createElement("span");
+      text.textContent = `${upload.originalName} · ${formatSize(upload.sizeBytes)} · ${dateTimeFormatter.format(new Date(upload.uploadedAt))}`;
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "link-btn";
+      remove.textContent = "删除";
+      remove.addEventListener("click", () => removeUpload(upload, remove));
+
+      item.append(text, remove);
       return item;
     })
   );
+}
+
+// 删掉盘上的文件不可恢复，先问一句再发请求；撤回后列表按服务端返回重拉，不做本地假删除。
+async function removeUpload(upload, button) {
+  if (!window.confirm(`将删除《${upload.originalName}》，删除后无法恢复，需要重新上传。确定删除？`)) return;
+
+  try {
+    await withBusy(button, "删除中…", () =>
+      api(`/api/uploads/${encodeURIComponent(upload.id)}`, { method: "DELETE" })
+    );
+    await loadUploads();
+    flash(el("upload-msg"), "已删除。", "ok");
+  } catch (error) {
+    flash(el("upload-msg"), error.message);
+  }
 }
 
 async function loadUploads() {

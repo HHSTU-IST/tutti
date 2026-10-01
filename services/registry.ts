@@ -78,7 +78,8 @@ export function buildAgentTopics(kind: AgentKind): TopicItem[] {
     return {
       key,
       name: getTopicName(kind, key),
-      total: (topic.single || []).length + (topic.judge || []).length,
+      // 进度分母与「这题练过没有」都按全部题型算：漏掉填空会让含填空题的专题永远到不了 100%。
+      total: (topic.single || []).length + (topic.judge || []).length + (topic.fill || []).length,
       buttonClass: "topic-btn"
     };
   });

@@ -55,6 +55,21 @@ export function restoreUserSession(availableAgents?: AgentKind[]): UserSession |
   return getCachedSession(availableAgents);
 }
 
+/**
+ * 退出登录：清掉本机缓存的会话与本地测试 openid，并抹掉上一次的失败原因。
+ * 退出后首页回到未登录态，需要重新走一次微信登录才能拿到最新授权。
+ */
+export function clearUserSession(): void {
+  lastLoginFailure = "";
+
+  try {
+    wx.removeStorageSync(LAST_USER_SESSION_STORAGE_KEY);
+    wx.removeStorageSync(LOCAL_TEST_OPEN_ID_STORAGE_KEY);
+  } catch {
+    // Storage is best-effort; 界面照样回未登录态。
+  }
+}
+
 function loginWithWechat(): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.login({

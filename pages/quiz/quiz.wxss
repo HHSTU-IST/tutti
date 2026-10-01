@@ -178,6 +178,81 @@
   text-align: center;
 }
 
+/* 题量选择：作用于「专题 / 随机」练习，四个按钮等宽排一行。 */
+.count-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.count-title {
+  color: #101828;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.count-hint {
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.count-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.count-btn {
+  background: #f8fafc;
+  border: 1rpx solid #d7e0ea;
+  border-radius: 8px;
+  color: #334155;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 12rpx 8rpx;
+}
+
+.count-btn.active {
+  background: #173d7a;
+  border-color: #173d7a;
+  color: #ffffff;
+}
+
+/* 练习结束的成绩汇总：整块替代题目卡片，所以给足留白。 */
+.result-summary {
+  padding: 28rpx 24rpx;
+}
+
+.summary-score {
+  margin: 14rpx 0 10rpx;
+  color: #101828;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.summary-note {
+  font-size: 25rpx;
+  line-height: 1.6;
+}
+
+.result-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.result-btn {
+  width: 100%;
+  border-radius: 8px;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 16rpx 12rpx;
+}
+
 .progress {
   padding: 24rpx;
 }
@@ -347,12 +422,43 @@
   font-weight: 700;
 }
 
+.explain-line {
+  margin-top: 8rpx;
+  color: #475467;
+  font-size: 25rpx;
+  line-height: 1.6;
+}
+
+/* 单条移除：原生 button 是块级 100% 宽，压不住，所以外层 view 定宽、按钮填满它。 */
+.error-remove-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14rpx;
+}
+
+.error-remove-wrap {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.error-remove {
+  width: 100%;
+  border-radius: 8px;
+  font-size: 24rpx;
+  line-height: 1.4;
+  padding: 8rpx 32rpx;
+}
+
 @media screen and (max-width: 360px) {
 
   .topic-grid,
   .mode-grid,
   .option-list {
     grid-template-columns: 1fr;
+  }
+
+  .count-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -379,7 +485,8 @@
   .empty-state,
   .actions,
   .progress,
-  .topic-picker {
+  .topic-picker,
+  .result-summary {
     padding-left: 18rpx;
     padding-right: 18rpx;
   }

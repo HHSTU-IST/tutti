@@ -1,14 +1,12 @@
 import { AgentAccessMap, AgentKind } from "./purchase";
 import { RUNTIME_CONFIG } from "./runtime-config";
+import type { WrongQuestionEntry } from "../types/quiz-bank";
 
-export interface WrongQuestionRecord {
-  id: string;
-  agent: AgentKind;
-  topic: string;
-  question: string;
-  answer: string;
-  createdAt: number;
-}
+/**
+ * 错题记录与答题引擎共用同一份结构（含解析），别名保留只是为了不惊动既有调用方。
+ * 真源在 `types/quiz-bank.ts` 的 `WrongQuestionEntry`。
+ */
+export type WrongQuestionRecord = WrongQuestionEntry;
 
 export interface AnswerStats {
   rightNum: number;

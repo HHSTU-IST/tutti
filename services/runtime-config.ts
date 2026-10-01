@@ -3,6 +3,11 @@ export interface RuntimeConfig {
   loginFunctionName: string;
   enableLocalWechatTestLogin: boolean;
   enableCloudDatabase: boolean;
+  /**
+   * 作业上传开关：与 enableCloudDatabase 分开，因为作业还会占用云存储额度，
+   * 两件事该能分别开关。关掉后首页与课程页都不再出现作业入口。
+   */
+  enableHomeworkUpload: boolean;
   /** 微信云开发环境 ID；留空走默认环境，多环境部署时填入以免连错云数据库。 */
   cloudEnv: string;
 }
@@ -11,6 +16,8 @@ const DEVELOPMENT_RUNTIME_CONFIG: RuntimeConfig = {
   loginFunctionName: "login",
   enableLocalWechatTestLogin: true,
   enableCloudDatabase: false,
+  // 本地没有云环境，传不上去，入口留着只会让人以为坏了。
+  enableHomeworkUpload: false,
   cloudEnv: ""
 };
 
@@ -20,6 +27,8 @@ const PRODUCTION_RUNTIME_CONFIG: RuntimeConfig = {
   loginFunctionName: "login",
   enableLocalWechatTestLogin: false,
   enableCloudDatabase: true,
+  // 作业上传需要云存储：集合与存储权限要在云开发控制台建好，见部署清单。
+  enableHomeworkUpload: true,
   // 多环境时填入云开发环境 ID；留空走默认环境。
   cloudEnv: ""
 };

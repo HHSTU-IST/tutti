@@ -308,3 +308,53 @@ test("退出登录后会话失效", async () => {
   const me = await call("/api/me");
   assert.equal(me.status, 401);
 });
+
+test("删除上传记录：只能删自己的，管理员可删任意一条", async () => {
+  // 前面的用例已把规则改成 hw-两位数字.txt，这里顺着用。
+  const content = Buffer.from("homework").toString("base64");
+
+  await login("admin", "admin-pwd");
+  const adminUpload = await call("/api/upload", {
+    method: "POST",
+    body: { courseId: "py", fileName: "hw-09.txt", contentBase64: content }
+  });
+  assert.equal(adminUpload.status, 200);
+  const adminFile = path.join(process.env.TUTTI_UPLOADS_DIR, adminUpload.data.upload.storedName);
+  assert.ok(fs.existsSync(adminFile));
+
+  // 学员删不掉别人的记录，也删不掉盘上的文件。
+  await login("student", "student-pwd");
+  const forbidden = await call(`/api/uploads/${encodeURIComponent(adminUpload.data.upload.id)}`, { method: "DELETE" });
+  assert.equal(forbidden.status, 403);
+  assert.ok(fs.existsSync(adminFile), "越权删除不应动到文件");
+
+  const ownUpload = await call("/api/upload", {
+    method: "POST",
+    body: { courseId: "py", fileName: "hw-10.txt", contentBase64: content }
+  });
+  const ownFile = path.join(process.env.TUTTI_UPLOADS_DIR, ownUpload.data.upload.storedName);
+
+  const removed = await call(`/api/uploads/${encodeURIComponent(ownUpload.data.upload.id)}`, { method: "DELETE" });
+  assert.equal(removed.status, 200);
+  assert.equal(fs.existsSync(ownFile), false, "删除记录时盘上的文件也要删掉");
+
+  const list = await call("/api/uploads");
+  assert.equal(
+    list.data.uploads.some(upload => upload.id === ownUpload.data.upload.id),
+    false,
+    "删掉的记录不应再出现在列表里"
+  );
+
+  // 不存在的 id、以及把路径穿越写进 id 的请求，都只是「记录不存在」。
+  const missing = await call("/api/uploads/1700000000-abcdef-hw-01.txt", { method: "DELETE" });
+  assert.equal(missing.status, 404);
+
+  const traversal = await call("/api/uploads/..%2F..%2Faccounts.json", { method: "DELETE" });
+  assert.equal(traversal.status, 404);
+  assert.ok(fs.existsSync(accountsPath), "路径穿越写法不能删到上传目录外的文件");
+
+  await login("admin", "admin-pwd");
+  const adminRemoved = await call(`/api/uploads/${encodeURIComponent(adminUpload.data.upload.id)}`, { method: "DELETE" });
+  assert.equal(adminRemoved.status, 200, "管理员应能删掉学员的记录");
+  assert.equal(fs.existsSync(adminFile), false);
+});

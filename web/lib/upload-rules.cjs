@@ -147,11 +147,56 @@ function listUploads({ username, isAdmin }) {
   return readIndex().filter(record => isAdmin || record.username === username);
 }
 
+/**
+ * 删除一条上传：先把文件删掉，再删索引里那条记录。
+ *
+ * 顺序不能反——反过来的话文件留在盘上没人认领，管理员只能自己去目录里翻。
+ * 只允许本人或管理员操作；索引文件可能是手改过的，所以 storedName 也当不可信输入处理。
+ */
+function deleteUpload({ id, username, isAdmin }) {
+  const records = readIndex();
+  const index = records.findIndex(record => record.id === id);
+  if (index < 0) {
+    const error = new Error("上传记录不存在");
+    error.status = 404;
+    throw error;
+  }
+
+  const record = records[index];
+  if (!isAdmin && record.username !== username) {
+    const error = new Error("只能删除自己的上传记录");
+    error.status = 403;
+    throw error;
+  }
+
+  removeStoredFile(record.storedName);
+
+  const remaining = records.slice();
+  remaining.splice(index, 1);
+  fs.writeFileSync(INDEX_PATH(), `${JSON.stringify(remaining, null, 2)}\n`);
+
+  return record;
+}
+
+// 落盘文件名一律在 UPLOADS_DIR 里按纯文件名解析：storedName 里带 ../ 时直接跳过，不碰目录外的文件。
+function removeStoredFile(storedName) {
+  const name = String(storedName || "");
+  if (!name || path.basename(name) !== name) return;
+
+  try {
+    fs.unlinkSync(path.join(UPLOADS_DIR, name));
+  } catch (error) {
+    // 文件已经不在（手工清理过）不算失败：索引记录照样要删，否则界面会留一条删不掉的幽灵记录。
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
 module.exports = {
   DEFAULT_RULES,
   RULES_PATH,
   UPLOADS_DIR,
   checkFile,
+  deleteUpload,
   describeRules,
   listUploads,
   normalizeRules,

@@ -2,11 +2,14 @@ import type {
   AnswerValue,
   ChoiceQuestion,
   DifficultyLevel,
+  PracticeQueue,
+  PracticeSection,
   QuestionOption,
   QuestionType,
   QuizBank,
   QuizQuestion,
-  RawQuestion
+  RawQuestion,
+  WrongQuestionEntry
 } from "../types/quiz-bank";
 
 const LETTERS: AnswerValue[] = ["A", "B", "C", "D", "E", "F"];
@@ -148,4 +151,61 @@ export function getQuestionText(question: QuizQuestion, type: QuestionType): str
   }
 
   return question.question;
+}
+
+/**
+ * 按「题型 × 题量」抽一整条练习队列。
+ *
+ * `topicKeys` 传一个专题就是专题练习，传全部专题就是随机练习；`sections` 传多段就是
+ * 试卷练习（20 单选 + 10 判断 + 10 填空）。题量不足时照常返回已抽到的题，并把缺口
+ * 写进 `shortfall`，由页面提示用户——静默截断会让人误以为卷子是全的。
+ */
+export function buildPracticeQueue(
+  bank: QuizBank,
+  topicKeys: string[],
+  sections: PracticeSection[],
+  resolveTopicName: (topicKey: string) => string
+): PracticeQueue {
+  const questions: QuizQuestion[] = [];
+  const shortfall: string[] = [];
+
+  sections.forEach(section => {
+    const picked = pickRandomMany(getAllQuestions(bank, topicKeys, section.type), section.count);
+
+    if (section.count > 0 && picked.length < section.count) {
+      shortfall.push(`${section.label}仅 ${picked.length}/${section.count} 题`);
+    }
+
+    picked.forEach(question => {
+      const topic = question.topic || "";
+      questions.push(normalizeQuestion(question, section.type, resolveTopicName(topic), topic));
+    });
+  });
+
+  return { questions, shortfall };
+}
+
+/** 错题身份：同专题下的同一道题算同一条，与选项顺序、答题时刻无关。 */
+function wrongQuestionKey(item: WrongQuestionEntry): string {
+  return `${item.topic || ""}\u0000${item.question}`;
+}
+
+/** 收敛错题本：同一道题重复答错只保留列表里靠前（较新）的那条。 */
+export function dedupeWrongQuestions(list: WrongQuestionEntry[]): WrongQuestionEntry[] {
+  const seen = new Set<string>();
+
+  return list.filter(item => {
+    const key = wrongQuestionKey(item);
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
+}
+
+/** 记一道错题：已在列表里的同题记录被替换并提到最前，避免错题本被同一题刷屏。 */
+export function upsertWrongQuestion(list: WrongQuestionEntry[], item: WrongQuestionEntry): WrongQuestionEntry[] {
+  const key = wrongQuestionKey(item);
+
+  return [item].concat(list.filter(existing => wrongQuestionKey(existing) !== key));
 }

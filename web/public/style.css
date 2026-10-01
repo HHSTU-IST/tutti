@@ -505,9 +505,22 @@ input[type="file"] {
 }
 
 .upload-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 0;
   border-top: 1px solid var(--line);
   overflow-wrap: anywhere;
+}
+
+/* 文件名可能很长：让它自己换行，别把「删除」挤出可视区。 */
+.upload-list li > span {
+  min-width: 0;
+}
+
+.upload-list li > .link-btn {
+  flex: 0 0 auto;
 }
 
 .upload-list li.empty {

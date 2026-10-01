@@ -1,5 +1,12 @@
 import { formatRuntimePlatform, getRuntimeDeviceInfo, resolveDeviceInfo } from "../../services/device";
-import { UserSession, getLastLoginFailure, resolveUserSession, restoreUserSession } from "../../services/purchase";
+import { isHomeworkUploadEnabled } from "../../services/homework";
+import {
+  UserSession,
+  clearUserSession,
+  getLastLoginFailure,
+  resolveUserSession,
+  restoreUserSession
+} from "../../services/purchase";
 import { CourseOption, listAgentCourses } from "../../services/registry";
 import { MISSING_CONFIG_MESSAGE, hasMissingProductionConfig } from "../../services/runtime-config";
 
@@ -9,6 +16,8 @@ interface CourseCard extends CourseOption {
   unlocked: boolean;
   cardClass: string;
   actionText: string;
+  /** 已开通且小程序开着作业上传时才显示入口。 */
+  showHomework: boolean;
 }
 
 interface IndexData {
@@ -20,13 +29,18 @@ interface IndexData {
   platformText: string;
   statusText: string;
   isLoading: boolean;
+  loginButtonText: string;
+  showLogout: boolean;
 }
 
 interface IndexPageInstance {
   refreshDeviceInfo(): void;
   handleWechatLogin(): Promise<void>;
+  handleLogout(): void;
   applySession(session: UserSession): void;
+  resetToLoggedOut(): void;
   enterCourse(event: MiniProgramTapEvent<{ kind?: string }>): void;
+  openHomework(event: MiniProgramTapEvent<{ kind?: string }>): void;
 }
 
 const DEFAULT_DEVICE_INFO = getRuntimeDeviceInfo();
@@ -40,7 +54,9 @@ Page<IndexData, IndexPageInstance>({
     platformClass: DEFAULT_DEVICE_INFO.platformClass,
     platformText: formatRuntimePlatform(DEFAULT_DEVICE_INFO),
     statusText: "微信登录后自动读取购买状态",
-    isLoading: false
+    isLoading: false,
+    loginButtonText: "微信登录",
+    showLogout: false
   },
 
   onLoad() {
@@ -60,6 +76,8 @@ Page<IndexData, IndexPageInstance>({
     });
   },
 
+  // 「微信登录」与「刷新授权」是同一件事：重新走一遍登录，把后台最新的 agents 拉下来。
+  // 管理员刚开通某门课时，学员点这个按钮即可，不必卸载重进。
   async handleWechatLogin() {
     if (this.data.loginState === "loading") return;
 
@@ -77,12 +95,41 @@ Page<IndexData, IndexPageInstance>({
         unlockedCount: 0,
         courseList: buildCourseCards(null),
         statusText: buildDeniedStatusText(),
-        isLoading: false
+        isLoading: false,
+        loginButtonText: "重新登录",
+        showLogout: false
       });
       return;
     }
 
     this.applySession(session);
+  },
+
+  handleLogout() {
+    wx.showModal({
+      title: "退出登录",
+      content: "退出后会清除本机缓存的登录状态，下次进入需重新微信登录才能读取课程授权。确定退出？",
+      confirmText: "退出",
+      success: result => {
+        if (!result.confirm) return;
+
+        clearUserSession();
+        this.resetToLoggedOut();
+      }
+    });
+  },
+
+  resetToLoggedOut() {
+    this.setData({
+      loginState: "idle",
+      wechatIdDisplay: "未读取",
+      unlockedCount: 0,
+      courseList: buildCourseCards(null),
+      statusText: "微信登录后自动读取购买状态",
+      isLoading: false,
+      loginButtonText: "微信登录",
+      showLogout: false
+    });
   },
 
   applySession(session: UserSession) {
@@ -95,7 +142,9 @@ Page<IndexData, IndexPageInstance>({
       unlockedCount,
       courseList,
       statusText: unlockedCount ? `已开通 ${unlockedCount} 个题库` : "暂未开通任何题库",
-      isLoading: false
+      isLoading: false,
+      loginButtonText: "刷新授权",
+      showLogout: true
     });
   },
 
@@ -105,18 +154,35 @@ Page<IndexData, IndexPageInstance>({
 
     const course = this.data.courseList.find(item => item.id === kind);
     if (!course || !course.unlocked) {
-      wx.showToast({ title: "该课程尚未开通", icon: "none" });
+      const title = course ? course.title : kind;
+      wx.showToast({
+        title: `「${title}」尚未开通，请联系管理员`,
+        icon: "none",
+        duration: 2500
+      });
       return;
     }
 
     wx.navigateTo({
       url: `/pages/quiz/quiz?kind=${kind}`
     });
+  },
+
+  // 作业入口挂在课程卡片里，用 catchtap 拦住冒泡，别顺带把「进入练习」也触发了。
+  openHomework(event: MiniProgramTapEvent<{ kind?: string }>) {
+    const kind = event.currentTarget.dataset.kind;
+    if (!kind) return;
+
+    wx.navigateTo({
+      url: `/pages/homework/homework?kind=${kind}`
+    });
   }
 });
 
 // 全部课程都内置在同一小程序里，是否可进入只取决于后台返回的授权。
 function buildCourseCards(session: UserSession | null): CourseCard[] {
+  const homeworkEnabled = isHomeworkUploadEnabled();
+
   return listAgentCourses().map(course => {
     const unlocked = Boolean(session && session.agents[course.id] === true);
 
@@ -124,7 +190,8 @@ function buildCourseCards(session: UserSession | null): CourseCard[] {
       ...course,
       unlocked,
       cardClass: unlocked ? "course-card unlocked" : "course-card locked",
-      actionText: unlocked ? "进入练习" : "未开通"
+      actionText: unlocked ? "进入练习" : "未开通",
+      showHomework: unlocked && homeworkEnabled
     };
   });
 }
