@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-import defusedxml.ElementTree as DefusedET  # type: ignore
+import defusedxml.ElementTree as DefusedET
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -21,111 +21,15 @@ CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 NS = {"w": W_NS}
 
 EXPORT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "templates" / "export.json"
+EXPORT_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "templates" / "export-schema.json"
+)
 DEFAULT_INPUT_MD = Path(__file__).resolve().parents[1] / "outputs" / "ml-2025-2-B.md"
 LATEX_REPLACEMENTS_PATH = (
     Path(__file__).resolve().parents[1] / "templates" / "latex-replace.json"
 )
 EXPORT_CONFIG = {}
 LATEX_REPLACEMENTS = {}
-REQUIRED_EXPORT_SCHEMA = {
-    "document": {
-        "pageSize": {"width": None, "height": None},
-        "margins": {
-            "top": None,
-            "right": None,
-            "bottom": None,
-            "left": None,
-            "header": None,
-            "footer": None,
-            "gutter": None,
-        },
-    },
-    "styles": {
-        "firstTitle": {
-            "font": {
-                "eastAsia": None,
-                "latin": None,
-                "sizeHalfPoints": None,
-                "bold": None,
-            },
-            "spacing": {"before": None, "after": None, "line": None},
-            "alignment": None,
-        },
-        "secondTitle": {
-            "font": {
-                "eastAsia": None,
-                "latin": None,
-                "sizeHalfPoints": None,
-                "bold": None,
-            },
-            "spacing": {"before": None, "after": None, "line": None},
-            "alignment": None,
-        },
-        "paperCode": {
-            "font": {
-                "eastAsia": None,
-                "latin": None,
-                "sizeHalfPoints": None,
-                "bold": None,
-            },
-            "spacing": {"before": None, "after": None, "line": None},
-            "alignment": None,
-            "indent": {"left": None, "firstLine": None, "hanging": None},
-        },
-        "targetMajor": {
-            "font": {
-                "eastAsia": None,
-                "latin": None,
-                "sizeHalfPoints": None,
-                "bold": None,
-            },
-            "spacing": {"before": None, "after": None, "line": None},
-            "alignment": None,
-            "indent": {"left": None, "firstLine": None, "hanging": None},
-        },
-        "sectionTitle": {
-            "font": {
-                "eastAsia": None,
-                "latin": None,
-                "sizeHalfPoints": None,
-                "bold": None,
-            },
-            "spacing": {"before": None, "after": None, "line": None},
-            "alignment": None,
-            "indent": {"left": None, "firstLine": None, "hanging": None},
-        },
-        "sectionNote": {
-            "font": {
-                "eastAsia": None,
-                "latin": None,
-                "sizeHalfPoints": None,
-                "bold": None,
-            }
-        },
-        "body": {
-            "font": {
-                "eastAsia": None,
-                "latin": None,
-                "sizeHalfPoints": None,
-                "bold": None,
-            },
-            "spacing": {"before": None, "after": None, "line": None},
-            "alignment": None,
-            "indent": {"left": None, "firstLine": None, "hanging": None},
-        },
-        "table": {"alignment": None, "borderStyle": None},
-    },
-    "rules": {
-        "titleLevel": None,
-        "sectionLevel": None,
-        "questionNumbering": None,
-        "sectionBeforeBlankLine": None,
-        "questionGap": None,
-        "questionIndent": None,
-        "tableCentered": None,
-    },
-    "trim": {"marker": None},
-}
 
 ET.register_namespace("w", W_NS)
 ET.register_namespace("r", R_NS)
@@ -138,6 +42,19 @@ INLINE_MATH_PATTERN = re.compile(r"\$([^$\n]+)\$")
 SCRIPT_TOKEN_PATTERN = re.compile(
     r"([A-Za-z]+)_([A-Za-z0-9]+)|([A-Za-z0-9()]+)\^([A-Za-z0-9]+)"
 )
+
+
+def load_export_schema() -> dict:
+    if not EXPORT_SCHEMA_PATH.exists():
+        raise FileNotFoundError(f"Missing export schema: {EXPORT_SCHEMA_PATH}")
+
+    with EXPORT_SCHEMA_PATH.open("r", encoding="utf-8") as handle:
+        schema = json.load(handle)
+
+    if not isinstance(schema, dict):
+        raise TypeError("Export schema must be a JSON object")
+
+    return schema
 
 
 def load_export_config() -> dict:
@@ -162,7 +79,7 @@ def load_export_config() -> dict:
                 raise KeyError(f"Missing export config key: {child_path}")
             validate(node[key], child_schema, child_path)
 
-    validate(config, REQUIRED_EXPORT_SCHEMA)
+    validate(config, load_export_schema())
 
     return config
 

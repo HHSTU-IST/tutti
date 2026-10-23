@@ -29,7 +29,7 @@
 ├── prompts/        # 课程知识点提示
 ├── scripts/        # 工具脚本：构建、账号、自检、组卷
 ├── services/       # 核心业务逻辑
-├── templates/      # 试卷模板与配置：exam-template.md、examif.json、export.json、latex-replace.json
+├── templates/      # 试卷模板与配置：exam-template.md、examif.json、export.json、export-schema.json、latex-replace.json
 ├── types/          # TypeScript 类型定义
 └── web/            # 网页版（Node 服务端 + 静态页面）
 ```
@@ -343,6 +343,7 @@ node scripts/miniprogram-release-check.cjs    # 小程序发布前自检
 | `templates/exam-template.md`   | 试卷模板，课程相关取值写成 `{{占位符}}`                            |
 | `templates/examif.json`        | 考试基本信息：课程代码、名称、学年、学期、卷别、试卷代码、适用对象 |
 | `templates/export.json`        | Word 导出的纸张、页边距与各段样式配置                              |
+| `templates/export-schema.json` | `export.json` 的必填键校验骨架（值为 `null`，只校验键是否存在）    |
 | `templates/latex-replace.json` | 数学式的文本化替换规则                                             |
 | `outputs/*.md`                 | 生成的试卷与答案（`-A` / `-Ak` / `-B` / `-Bk`）                    |
 | `outputs/*.docx`               | 由 Markdown 导出的 Word 文档                                       |

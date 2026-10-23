@@ -1,0 +1,147 @@
+{
+  "document": {
+    "pageSize": {
+      "width": null,
+      "height": null
+    },
+    "margins": {
+      "top": null,
+      "right": null,
+      "bottom": null,
+      "left": null,
+      "header": null,
+      "footer": null,
+      "gutter": null
+    }
+  },
+  "styles": {
+    "firstTitle": {
+      "font": {
+        "eastAsia": null,
+        "latin": null,
+        "sizeHalfPoints": null,
+        "bold": null
+      },
+      "spacing": {
+        "before": null,
+        "after": null,
+        "line": null
+      },
+      "alignment": null
+    },
+    "secondTitle": {
+      "font": {
+        "eastAsia": null,
+        "latin": null,
+        "sizeHalfPoints": null,
+        "bold": null
+      },
+      "spacing": {
+        "before": null,
+        "after": null,
+        "line": null
+      },
+      "alignment": null
+    },
+    "paperCode": {
+      "font": {
+        "eastAsia": null,
+        "latin": null,
+        "sizeHalfPoints": null,
+        "bold": null
+      },
+      "spacing": {
+        "before": null,
+        "after": null,
+        "line": null
+      },
+      "alignment": null,
+      "indent": {
+        "left": null,
+        "firstLine": null,
+        "hanging": null
+      }
+    },
+    "targetMajor": {
+      "font": {
+        "eastAsia": null,
+        "latin": null,
+        "sizeHalfPoints": null,
+        "bold": null
+      },
+      "spacing": {
+        "before": null,
+        "after": null,
+        "line": null
+      },
+      "alignment": null,
+      "indent": {
+        "left": null,
+        "firstLine": null,
+        "hanging": null
+      }
+    },
+    "sectionTitle": {
+      "font": {
+        "eastAsia": null,
+        "latin": null,
+        "sizeHalfPoints": null,
+        "bold": null
+      },
+      "spacing": {
+        "before": null,
+        "after": null,
+        "line": null
+      },
+      "alignment": null,
+      "indent": {
+        "left": null,
+        "firstLine": null,
+        "hanging": null
+      }
+    },
+    "sectionNote": {
+      "font": {
+        "eastAsia": null,
+        "latin": null,
+        "sizeHalfPoints": null,
+        "bold": null
+      }
+    },
+    "body": {
+      "font": {
+        "eastAsia": null,
+        "latin": null,
+        "sizeHalfPoints": null,
+        "bold": null
+      },
+      "spacing": {
+        "before": null,
+        "after": null,
+        "line": null
+      },
+      "alignment": null,
+      "indent": {
+        "left": null,
+        "firstLine": null,
+        "hanging": null
+      }
+    },
+    "table": {
+      "alignment": null,
+      "borderStyle": null
+    }
+  },
+  "rules": {
+    "titleLevel": null,
+    "sectionLevel": null,
+    "questionNumbering": null,
+    "sectionBeforeBlankLine": null,
+    "questionGap": null,
+    "questionIndent": null,
+    "tableCentered": null
+  },
+  "trim": {
+    "marker": null
+  }
+}
