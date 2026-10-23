@@ -8,10 +8,6 @@ dependencies = [
   "defusedxml>=0.7.1",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [tool.ruff]
 fix = true
 target-version = "py314"
@@ -57,6 +53,9 @@ case-sensitive = true
 combine-as-imports = true
 force-wrap-aliases = true
 order-by-type = true
+
+[tool.uv]
+package = false
 
 [[tool.uv.index]]
 url = "https://pypi.mirrors.ustc.edu.cn/simple"
