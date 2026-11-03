@@ -9,11 +9,14 @@ const DATA_DIR = path.join(__dirname, "../data");
 const REGISTRY_PATH = path.join(__dirname, "../services/registry.ts");
 const QUESTION_TYPES = ["single", "judge", "fill"];
 
+// 题库真源是纯数据文件 data/topic-<id>.js：`module.exports = { …JSON 文本… }`。
+function topicFiles() {
+  return fs.readdirSync(DATA_DIR).filter(file => /^topic-.*\.js$/.test(file)).sort();
+}
+
 function topicFileIds() {
-  return fs
-    .readdirSync(DATA_DIR)
-    .filter(file => /^topic-.*\.ts$/.test(file))
-    .map(file => file.replace(/^topic-/, "").replace(/\.ts$/, ""))
+  return topicFiles()
+    .map(file => file.replace(/^topic-/, "").replace(/\.js$/, ""))
     .sort();
 }
 
@@ -44,15 +47,55 @@ function countByType(bank, topicKeys) {
   }, { single: 0, judge: 0, fill: 0 });
 }
 
-test("registry 的课程清单与 data/topic-*.ts 一一对应", () => {
+const ASSIGN_ANCHOR = /^module\.exports = /m;
+
+test("registry 的课程清单与 data/topic-*.js 一一对应", () => {
   const ids = topicFileIds();
-  assert.ok(ids.length > 0, "data/ 下没有任何 topic-*.ts");
+  assert.ok(ids.length > 0, "data/ 下没有任何 topic-*.js 题库");
 
   assert.deepEqual(
     registryIds(),
     ids,
-    "services/registry.ts 与 data/topic-*.ts 必须一一对应：加了题库要在注册表登记，反之亦然"
+    "services/registry.ts 与 data/topic-*.js 必须一一对应：加了题库要在注册表登记，反之亦然"
   );
+});
+
+// 题库改成纯数据是为了甩掉「Node 侧自己剥类型」那条实验性依赖（P0-1）。
+// 数据就得是数据：注释、尾逗号、单引号字符串、JS 转义写法都会让 JSON.parse 失败，这里先红。
+test("题库正文是严格合法的 JSON 文本，require 结果与之完全一致", () => {
+  topicFiles().forEach(file => {
+    const absolute = path.join(DATA_DIR, file);
+    const source = fs.readFileSync(absolute, "utf8");
+    const match = ASSIGN_ANCHOR.exec(source);
+    assert.ok(match, `${file} 应有一行以 module.exports = 开头`);
+
+    const jsonText = source.slice(match.index + match[0].length, source.lastIndexOf(";"));
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (error) {
+      assert.fail(`${file} 的正文不是严格 JSON（题库只放数据：不许注释、尾逗号、单引号字符串）：${error.message}`);
+      return;
+    }
+
+    // 除这一行赋值外不该有别的代码：require 出来的对象必须与 JSON 文本一字不差地等价。
+    assert.deepEqual(require(absolute), parsed, `${file} require 结果与 JSON 正文不一致（中间有代码改了数据？）`);
+  });
+});
+
+test("题库真源只有一份：data/ 下不该再留旧的 topic-*.ts", () => {
+  const leftovers = fs.readdirSync(DATA_DIR).filter(file => /^topic-.*\.ts$/.test(file)).sort();
+
+  assert.deepEqual(leftovers, [], `data/ 下还留着旧的 TS 题库：${leftovers.join("、")}——网页端与小程序读的都是 .js`);
+});
+
+test("registry require 的题库文件都真实存在", () => {
+  const source = fs.readFileSync(REGISTRY_PATH, "utf8");
+  const required = Array.from(source.matchAll(/require\("\.\.\/data\/(topic-[\w-]+)"\)/g), match => match[1]).sort();
+
+  assert.deepEqual(required, topicFiles().map(file => file.replace(/\.js$/, "")).sort(),
+    "services/registry.ts 里 require 的题库必须与 data/ 下的文件一一对应（改名/删除题库时别留下悬空引用）");
 });
 
 test("题库 _config 声明的课程标题与专题与题库内容完全对齐", () => {

@@ -6,6 +6,21 @@ const childProcess = require("child_process");
 const templatePath = path.join(__dirname, "../templates/exam-template.md");
 const examifPath = path.join(__dirname, "../templates/examif.json");
 const docxScriptPath = path.join(__dirname, "generate-exam-docx.py");
+
+// docx 导出的 Python 依赖声明在 pyproject.toml，实际装在项目 .venv 里；裸 `python3` 常常是系统解释器，
+// 会撞上 ModuleNotFoundError: defusedxml。优先级：PYTHON 环境变量 > 项目 .venv > python3。
+function resolvePythonBin() {
+  if (process.env.PYTHON) return process.env.PYTHON;
+
+  const venvCandidates = [
+    path.join(__dirname, "../.venv/Scripts/python.exe"),
+    path.join(__dirname, "../.venv/bin/python")
+  ];
+  const venvPython = venvCandidates.find(candidate => fs.existsSync(candidate));
+
+  return venvPython || "python3";
+}
+
 const examif = JSON.parse(fs.readFileSync(examifPath, "utf8"));
 
 let templateCache = null;
@@ -208,7 +223,7 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
   }
 
   function generateDocx(mdPath) {
-    const pythonBin = process.env.PYTHON || "python3";
+    const pythonBin = resolvePythonBin();
     const result = childProcess.spawnSync(pythonBin, [docxScriptPath, mdPath], {
       encoding: "utf8",
       stdio: "pipe"
@@ -217,7 +232,11 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
     if (result.status !== 0) {
       const stderr = (result.stderr || "").trim();
       const stdout = (result.stdout || "").trim();
-      throw new Error(`DOCX转换失败：${mdPath}\n${stderr || stdout || "unknown error"}`);
+      // 解释器根本起不来时（PYTHON 指向不存在的文件、系统没有 python3）status 为 null 且两路输出皆空，
+      // 真正的线索在 result.error 里，不能让它退化成一句 unknown error。
+      const launchError = result.error ? `${result.error.message}（解释器：${pythonBin}）` : "";
+      const details = launchError || stderr || stdout || `未知失败（退出码 ${result.status}）`;
+      throw new Error(`DOCX转换失败（解释器：${pythonBin}）：${mdPath}\n${details}`);
     }
 
     const output = (result.stdout || "").trim();

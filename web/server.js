@@ -110,6 +110,15 @@ function handleLogin(req, res, body) {
     return sendJson(res, 401, { error: "用户名或密码错误" });
   }
 
+  // 口令曾随 data/accounts.json 提交进 git 历史（已被还原成明文），验对也不能发会话：先轮换再用。
+  if (!auth.ALLOW_LEAKED_PASSWORDS && auth.isLeakedPassword(user)) {
+    auth.revokeSessionsForUsernames([user.username]);
+    return sendJson(res, 403, {
+      error: "该账号仍在使用已公开的默认密码，已停用。请管理员执行：node scripts/manage-accounts.cjs passwd "
+        + `${user.username} --random`
+    });
+  }
+
   loginFailures.delete(key);
   const token = auth.createSession(user);
   res.writeHead(200, {
@@ -444,7 +453,15 @@ function logDeploymentDiagnostics() {
 
   const defaultPasswordUsers = auth.findUsersWithDefaultPassword();
   if (defaultPasswordUsers.length) {
-    console.warn(`[安全告警] 以下账号仍在使用默认密码：${defaultPasswordUsers.join("、")}`);
+    if (auth.ALLOW_LEAKED_PASSWORDS) {
+      console.warn(`[安全告警] 以下账号仍在使用已公开的默认密码：${defaultPasswordUsers.join("、")}`);
+      console.warn("  已用 TUTTI_ALLOW_LEAKED_PASSWORDS=1 放行登录（只适合本地演示，线上去掉这个变量）。");
+      return;
+    }
+
+    const revoked = auth.revokeSessionsForUsernames(defaultPasswordUsers);
+    console.warn(`[安全阻断] 以下账号的口令在 git 历史里公开过，已停用：${defaultPasswordUsers.join("、")}`);
+    console.warn(`  已吊销它们已有的会话：${revoked} 个。`);
     console.warn("  处理：node scripts/manage-accounts.cjs passwd <账号> --random，然后重启服务。");
   }
 }

@@ -12,7 +12,10 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-import defusedxml.ElementTree as DefusedET
+try:
+    import defusedxml.ElementTree as DefusedET
+except ModuleNotFoundError as missing_dep:
+    raise SystemExit("缺少依赖 defusedxml") from missing_dep
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"

@@ -1,6 +1,9 @@
 import { AgentKind } from "./purchase";
 import { BankConfig, QuizBank, TopicBank, TopicItem } from "../types/quiz-bank";
 
+// 题库是纯数据文件 `data/topic-<课程码>.js`（`module.exports = { …JSON 文本… }`）：
+// 这里不带扩展名的 require 解析到的就是它，两端（小程序与网页服务/组卷脚本）读同一份。
+// 不要再往 data/ 下放 .ts 题库——网页端与脚本侧已经没有类型剥离那条路了。
 const pyBank = require("../data/topic-py") as QuizBank;
 const mlBank = require("../data/topic-ml") as QuizBank;
 const alBank = require("../data/topic-al") as QuizBank;
@@ -19,7 +22,7 @@ export interface CourseOption {
 }
 
 // 注册表只回答「有哪些课程、各自对应哪个题库」。
-// 标题、专题顺序与专题名一律以题库 `data/topic-*.ts` 的 `_config` 为准，
+// 标题、专题顺序与专题名一律以题库 `data/topic-*.js` 的 `_config` 为准，
 // 避免同一份元数据在小程序、网页端构建脚本里各存一份并逐渐漂移。
 export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
   py: { id: "py", bank: pyBank },

@@ -93,20 +93,23 @@
 
 ### 课程元数据的唯一真源
 
-课程标题、专题顺序、专题名（以及每个专题的单选/判断/填空内容）**只写在题库文件 `data/topic-*.ts` 的 `_config` 里**：
+课程标题、专题顺序、专题名（以及每个专题的单选/判断/填空内容）**只写在题库文件 `data/topic-*.js` 的 `_config` 里**。题库是纯数据文件——`module.exports =` 之后必须是一段能被严格 `JSON.parse` 解析的 JSON 文本，不许注释、尾逗号、单引号字符串或 TypeScript 语法：
 
-```ts
-"_config": {
-  "title": "Python 课程",
-  "topicOrder": ["var", "flow", "func", "oop", "decorator", "magic", "generator", "thread", "code"],
-  "topicNameMap": { "var": "变量", "flow": "控制流", "…": "…" }
+```js
+// data/topic-py.js
+module.exports = {
+  "_config": {
+    "title": "Python 课程",
+    "topicOrder": ["var", "flow", "func", "oop", "decorator", "magic", "generator", "thread", "code"],
+    "topicNameMap": { "var": "变量", "flow": "控制流", "…": "…" }
+  }
 }
 ```
 
 - 小程序端：`services/registry.ts` 只登记 `id → bank`，标题/专题都从 `_config` 读。
 - 网页端构建：`web/lib/catalog.cjs` 也直接读 `_config`（不再正则解析 `registry.ts`）。
 - 组卷脚本：`scripts/generate-exam.cjs` 从 `bank._config` 取专题顺序与名称。
-- `scripts/topic-bank.test.cjs` 会校验：注册表与 `data/topic-*.ts` 一一对应、`title` 非空、`topicOrder` 里的专题在题库中存在且 `topicNameMap` 有条目。
+- `scripts/topic-bank.test.cjs` 会校验：注册表与 `data/topic-*.js` 一一对应、题库正文能被严格 `JSON.parse` 解析且与 `require` 结果一致、`data/` 下不再留旧的 `topic-*.ts`、`title` 非空、`topicOrder` 里的专题在题库中存在且 `topicNameMap` 有条目。
 
 ### 新增一门课程（智能体）
 
@@ -122,7 +125,9 @@
 
 ### 题库来源
 
-`web/lib/banks.cjs` 启动时用 `web/lib/catalog.cjs` 的 `buildCatalogFromRepo()` 直接读仓库的 `data/topic-*.ts`（经 `scripts/load-topic-bank.cjs` 做 Node ≥ 22.6 的类型剥离）。没有构建步骤、也没有第二份副本：改完题库重启服务即生效。
+`web/lib/banks.cjs` 启动时用 `web/lib/catalog.cjs` 的 `buildCatalogFromRepo()` 直接读仓库的 `data/topic-*.ts`（经 `scripts/load-topic-bank.cjs` → `scripts/load-ts-module.cjs`，用 Node ≥ 22.6 的类型剥离）。没有构建步骤、也没有第二份副本：改完题库重启服务即生效。
+
+`load-ts-module.cjs` 只让 Node 干「删类型标注」这一件事（strip 模式；会顺带改写模块格式的 transform 模式在新版 Node 上已经取消，别依赖它），ESM→CommonJS 由文件里那几条显式规则完成。因此**被 Node 侧加载的 TS 文件只用这几种写法**：type-only import（`import type { X } from "..."`）、`export function` / `export class` / `export const`、`export = <标识符>;`（题库与 `data/access.ts` 的写法）。用了别的 ESM 语法或不可擦除语法（`enum`、`namespace`、构造函数参数属性、`export = 表达式`）会立刻抛错并指名文件，不会静默跑成半个模块。
 
 代价是一条部署约束：**`web/` 与 `data/` 必须一起存在**（服务读的是 `../data/topic-*.ts`），只拷贝 `web/` 目录是跑不起来的。课程标题与专题顺序同样取自题库 `_config`，与小程序端 `services/registry.ts` 同源。
 
@@ -207,6 +212,23 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 `init` 建的两个账号是 `admin`（管理员，全部题库）与 `demo`（仅 `py`）。密码不是固定的：默认随机生成并在 `init` 时打印一次，也可以在 `init` 前用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定。
 
 > 账号真源是 `data/accounts.json`，CLI 只改这一处，服务端读的也是这一处：改完重启服务即生效。已经在用的人要重新登录一次，才会带上新的课程权限（会话里的解锁课程是登录时定的）。
+
+#### 历史口令泄露的处置（必读）
+
+`data/accounts.json` 曾经在提交 `03c6590` 进过仓库、`2535eaf` 删除，现在已 ignore，**但 blob 还留在 git 历史里**：那两个账号的 `pbkdf2` 哈希已被实测还原成 `admin2026` / `demo2026`。也就是说这两个值是公开信息，任何沿用它们的实例都等于把口令写进了公开仓库。
+
+代码侧的处理（已生效，不用你配置）：
+
+- 登录时口令命中这两个值 → 即使哈希验算通过也返回 403，不发会话，并吊销该账号已有会话。
+- 服务启动自检：列出命中的账号，报告已吊销的会话数。
+- `node scripts/web-deploy-check.cjs`：命中即判失败（退出码 1），上线跑它就拦得住。
+- 只想在本地演示、拿历史口令登一次：`TUTTI_ALLOW_LEAKED_PASSWORDS=1`（线上不要设）。
+
+你要做的处置：
+
+1. 逐个轮换：`node scripts/manage-accounts.cjs passwd <账号> --random`（`list` 看不出问题，得跑一次 `web-deploy-check` 确认没有账号命中）。
+2. 检查线上是否还有别处沿用这两个值（手工建过的账号、备份里的旧 `accounts.json`）。
+3. 要不要清历史由你决定：`git filter-repo --path data/accounts.json --invert-paths` 可以抹掉 blob，但会重写全部提交哈希、需要 force-push、协作方要重新克隆——**做了这一步才是真正撤销泄露**，否则只是承认它公开了。留着历史的代价是可以接受的（口令值已经算公开），前提是没有任何在用的账号还用它。
 
 ## 微信登录与开通（云函数）
 
@@ -356,8 +378,14 @@ node scripts/generate-exam-cv.cjs
 # 显式指定 examif.json 里的配置 key
 node scripts/generate-exam-ml.cjs machine-learning
 
-# 只把已有的 Markdown 导出成 Word
-python scripts/generate-exam-docx.py outputs/ml-2025-2-B.md
+# 只把已有的 Markdown 导出成 Word（用项目虚拟环境的解释器，依赖才在）
+.venv/Scripts/python.exe scripts/generate-exam-docx.py outputs/ml-2025-2-B.md   # Windows
+.venv/bin/python        scripts/generate-exam-docx.py outputs/ml-2025-2-B.md   # macOS / Linux
 ```
 
-docx 导出依赖 `pandoc`；不装 pandoc 时 Markdown 仍会生成，只是 Word 那一步失败。排版细节与格式要求见 [design.md](./design.md)。
+docx 导出有两个前提，少一个就只在 Word 那一步失败（Markdown 仍会生成）：
+
+1. `pandoc` 在 PATH 里。
+2. Python 依赖 `defusedxml`（`pyproject.toml` 声明）装在**你用来跑脚本的那个解释器**里。跑 `uv sync` 生成/补齐项目 `.venv` 即可；`node scripts/generate-exam-*.cjs` 触发导出时按 `PYTHON` 环境变量 → 项目 `.venv` → `python3` 的顺序挑解释器，所以装了 `.venv` 就不必手工指定。直接敲裸 `python scripts/generate-exam-docx.py` 命中的多半是系统 Python，会报 `缺少依赖 defusedxml`。
+
+排版细节与格式要求见 [design.md](./design.md)。

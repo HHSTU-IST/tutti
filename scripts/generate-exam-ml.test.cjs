@@ -6,7 +6,7 @@ const childProcess = require("child_process");
 
 const scriptPath = path.join(__dirname, "generate-exam-ml.cjs");
 
-function withMocks(testFn) {
+function withMocks(testFn, options = {}) {
   return (t) => {
     delete require.cache[require.resolve(scriptPath)];
 
@@ -14,12 +14,17 @@ function withMocks(testFn) {
     const spawns = [];
     const logs = [];
     const orig = { write: fs.writeFileSync, spawn: childProcess.spawnSync, log: console.log };
+    const docxScript = path.join(__dirname, "generate-exam-docx.py");
 
     fs.writeFileSync = (filePath, content) => writes.push({ filePath, content });
-    childProcess.spawnSync = (command, args, options) => {
-      spawns.push({ command, args, input: options && options.input });
+    childProcess.spawnSync = (command, args, options2) => {
+      spawns.push({ command, args, input: options2 && options2.input });
+      // docx 导出可以被测试注入失败结果，用来断言报错信息够不够可操作。
+      if (typeof options.docxResult === "function" && (args || []).includes(docxScript)) {
+        return options.docxResult({ command, args });
+      }
       // rumdl fmt - 从 stdin 读取正文并把格式化结果输出到 stdout，这里回显输入以模拟真实行为。
-      const echoed = options && typeof options.input === "string" ? options.input : "";
+      const echoed = options2 && typeof options2.input === "string" ? options2.input : "";
       return { status: 0, stdout: echoed, stderr: "" };
     };
     console.log = (value) => logs.push(value);
@@ -33,6 +38,12 @@ function withMocks(testFn) {
       delete require.cache[require.resolve(scriptPath)];
     }
   };
+}
+
+// docx 导出的解释器是解析出来的（PYTHON 环境变量 > 项目 .venv > python3），
+// 所以按「参数里带了 generate-exam-docx.py」认这条 spawn，而不是认命令名。
+function findDocxSpawn(spawns) {
+  return spawns.find((s) => (s.args || []).includes(path.join(__dirname, "generate-exam-docx.py")));
 }
 
 test("generate-exam-ml test stays focused on paper generation behavior", () => {
@@ -102,19 +113,79 @@ test("publishGeneratedArtifacts writes files, logs paths, and triggers docx expo
 
   assert.deepEqual(logs, ["/tmp/ml-2025-2-A.md", "/tmp/ml-2025-2-Ak.md"]);
 
-  // 2 次 rumdl（正文 + 答案）+ 1 次 python3（docx 导出）
+  // 2 次 rumdl（正文 + 答案）+ 1 次 python（docx 导出）
   assert.equal(spawns.length, 3);
   const rumdlSpawns = spawns.filter((s) => s.command === "rumdl");
   assert.equal(rumdlSpawns.length, 2);
   assert.deepEqual(rumdlSpawns.map((s) => s.args), [["format", "-"], ["format", "-"]]);
   assert.deepEqual(rumdlSpawns.map((s) => s.input), ["paper body", "answer body"]);
 
-  const docxSpawn = spawns.find((s) => s.command === "python3");
+  const docxSpawn = findDocxSpawn(spawns);
   assert.ok(docxSpawn, "应触发 docx 导出");
+  assert.match(path.basename(docxSpawn.command), /^python(\d+(\.\d+)?)?(\.exe)?$/i, "docx 导出要用 python 解释器");
   assert.deepEqual(docxSpawn.args.slice(-2), [
     path.join(__dirname, "generate-exam-docx.py"),
     "/tmp/ml-2025-2-A.md",
   ]);
+}));
+
+test("docx 导出的解释器优先级：PYTHON > 项目 .venv > python3", withMocks(({ examModule, spawns }) => {
+  const manifestEntry = { outPaper: "/tmp/ml-2025-2-A.md", outAnswer: "/tmp/ml-2025-2-Ak.md" };
+  const originalPython = process.env.PYTHON;
+
+  try {
+    process.env.PYTHON = "/opt/custom/python-3.14";
+    examModule.publishGeneratedArtifacts({ manifestEntry, paper: "p", answer: "a" });
+    assert.equal(findDocxSpawn(spawns).command, "/opt/custom/python-3.14", "PYTHON 环境变量要压过一切");
+
+    spawns.length = 0;
+    delete process.env.PYTHON;
+    examModule.publishGeneratedArtifacts({ manifestEntry, paper: "p", answer: "a" });
+    const resolved = findDocxSpawn(spawns).command;
+    const venvWin = path.join(__dirname, "../.venv/Scripts/python.exe");
+    const venvPosix = path.join(__dirname, "../.venv/bin/python");
+    const hasVenv = fs.existsSync(venvWin) || fs.existsSync(venvPosix);
+
+    if (hasVenv) {
+      assert.equal(resolved, fs.existsSync(venvWin) ? venvWin : venvPosix, "项目 .venv 存在时要用它，否则装好的依赖找不到");
+    } else {
+      assert.equal(resolved, "python3", "没有 .venv 时退回 python3，交给系统环境");
+    }
+  } finally {
+    if (originalPython === undefined) delete process.env.PYTHON;
+    else process.env.PYTHON = originalPython;
+  }
+}));
+
+test("docx 导出失败要把解释器与脚本的报错原样端出来", withMocks(({ examModule }) => {
+  const manifestEntry = { outPaper: "/tmp/ml-2025-2-A.md", outAnswer: "/tmp/ml-2025-2-Ak.md" };
+
+  assert.throws(
+    () => examModule.publishGeneratedArtifacts({ manifestEntry, paper: "p", answer: "a" }),
+    (error) => {
+      assert.match(error.message, /DOCX转换失败/);
+      assert.match(error.message, /缺少依赖 defusedxml。/, "脚本给出的可操作提示不能被吞掉");
+      return true;
+    },
+  );
+}, {
+  docxResult: () => ({ status: 1, stdout: "", stderr: "缺少依赖 defusedxml。" }),
+}));
+
+test("docx 导出解释器起不来时报错要指名启动失败，不能只说 unknown error", withMocks(({ examModule }) => {
+  const manifestEntry = { outPaper: "/tmp/ml-2025-2-A.md", outAnswer: "/tmp/ml-2025-2-Ak.md" };
+
+  assert.throws(
+    () => examModule.publishGeneratedArtifacts({ manifestEntry, paper: "p", answer: "a" }),
+    (error) => {
+      assert.doesNotMatch(error.message, /unknown error/, "启动失败必须报出原因");
+      assert.match(error.message, /ENOENT/, "要带出 spawnSync 的错误码");
+      return true;
+    },
+  );
+}, {
+  // 解释器路径不存在时 spawnSync 的形态：status null、两路输出皆空，线索只在 result.error。
+  docxResult: ({ command }) => ({ status: null, stdout: "", stderr: "", error: Object.assign(new Error("spawnSync ENOENT"), { code: "ENOENT", path: command }) }),
 }));
 
 test("runCli returns a manifest for both generated paper versions", withMocks(({ examModule, writes, spawns, logs }) => {
@@ -156,7 +227,7 @@ test("runCli returns a manifest for both generated paper versions", withMocks(({
   assert.equal(writes.length, 4);
   assert.equal(new Set(writes.map((w) => w.filePath)).size, 4, "每个版本的文件只写一次");
   assert.equal(spawns.filter((s) => s.command === "rumdl").length, 4);
-  assert.equal(spawns.filter((s) => s.command === "python3").length, 2);
+  assert.equal(spawns.filter((s) => (s.args || []).includes(path.join(__dirname, "generate-exam-docx.py"))).length, 2);
   assert.equal(logs.length, 4);
 }));
 

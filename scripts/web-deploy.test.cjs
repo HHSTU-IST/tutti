@@ -186,4 +186,10 @@ test("默认密码自检能检出 admin2026，改掉后放行", () => {
     makeUser(auth, "demo", "Xc4n-Wt8sL3d", "user", ["py"])
   ]);
   assert.deepEqual(auth.findUsersWithDefaultPassword(), [], "换掉密码后不应再告警");
+
+  // 泄露的是口令值不是用户名：别的账号用了同一个值也要被检出。
+  writeAccounts([
+    makeUser(auth, "teacher", "demo2026", "user", ["py"])
+  ]);
+  assert.deepEqual(auth.findUsersWithDefaultPassword(), ["teacher"], "按口令值检出，不看用户名");
 });

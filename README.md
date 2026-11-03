@@ -99,7 +99,7 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 
 两条发布通道共用 `data/topic-*.ts` 这一份题库，可只上一边，也可两边都上。
 
-> **运行环境**：Node ≥ 22.6.0（`web/package.json` 的 `engines` 已声明，用系统里装好的 Node 即可；项目零依赖，不需要 `npm install`）。小程序端由微信开发者工具编译，不受这个限制。
+> **运行环境**：Node ≥ 22.6.0（`web/package.json` 的 `engines` 已声明，用系统里装好的 Node 即可；网页版与小程序零依赖，不需要 `npm install`）。例外是**组卷的 Word 导出**：还要 `pandoc`，以及 `pyproject.toml` 声明的 Python 依赖（`defusedxml`，装在项目 `.venv` 里，`uv sync` 即可；脚本会优先用 `.venv` 的解释器）。小程序端由微信开发者工具编译，不受 Node 版本限制。
 
 | 通道       | 入口       | 登录方式               | 运行形态               |
 | ---------- | ---------- | ---------------------- | ---------------------- |
@@ -119,7 +119,7 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 # 有持久化目录的机器上，让它把会话/规则/作业都落到那里，别留在随代码更新的 web/data：
 # TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
 
-# 3) 启动前先自检一次（账号表、默认密码、会话落盘、运行数据目录）
+# 3) 启动前先自检一次（账号表、历史泄露口令、会话落盘、运行数据目录）
 node scripts/web-deploy-check.cjs
 ```
 
@@ -132,6 +132,7 @@ node scripts/web-deploy-check.cjs
   | `TUTTI_DATA_DIR`      | `web/data`                  | 运行数据目录：会话、上传规则、学员作业都落这里 |
   | `TUTTI_SESSION_STORE` | `file`                      | `file` 落盘（重启不掉线）/ `memory` 纯进程内存 |
   | `TUTTI_SESSION_DIR`   | `<TUTTI_DATA_DIR>/sessions` | 单独指定会话目录，一般不用改                   |
+  | `TUTTI_ALLOW_LEAKED_PASSWORDS` | 未设置               | 仅本地演示：放行命中历史泄露口令的账号（线上别设） |
 
   默认的 `web/data` 就在应用目录里，更新代码时容易被一并覆盖。想长期保留登录态、上传规则与学员作业，就把它指到应用目录之外，之后用 `GET /api/health` 的 `dataDirBoots` / `dataDirFirstBootAt` 复核（重启后 `boots` 继续累加、`firstBootAt` 不变即为正常）：
 
@@ -139,6 +140,8 @@ node scripts/web-deploy-check.cjs
   TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
   node scripts/web-deploy-check.cjs
   ```
+
+- **历史口令已被公开，服务端会阻断**：`data/accounts.json` 曾随提交 `03c6590` 进过仓库（`2535eaf` 删除，但 blob 还在历史里），那两个哈希已还原成 `admin2026` / `demo2026`。现在账号口令只要命中这两个值，登录即使验算通过也返回 403，服务启动时还会吊销它已有的会话。轮换：`node scripts/manage-accounts.cjs passwd <账号> --random`。完整处置（含要不要清 git 历史的取舍）见 [docs/development.md](docs/development.md) 的「历史口令泄露的处置」。
 
 **部署清单**：启动前逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/web-deploy-check.cjs` 自检，退出码非 0 即还有未通过项）。
 

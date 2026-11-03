@@ -1,5 +1,5 @@
 // 各课程的组卷参数。专题顺序与专题名不在这里写——它们以题库 `_config` 为准
-// （见 data/topic-*.ts），组卷工厂自己会读。
+// （见 data/topic-*.js），组卷工厂自己会读。
 // 入口脚本（generate-exam-<课程码>.cjs）只负责把配置交给工厂，并在被直接执行时跑一次 CLI。
 const { createExamGenerator } = require("./generate-exam.cjs");
 const { loadQuizEngine } = require("./load-quiz-engine.cjs");

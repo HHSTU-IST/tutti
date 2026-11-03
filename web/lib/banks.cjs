@@ -1,10 +1,6 @@
-const path = require("path");
-
-// 题库只有一份真源：仓库的 data/topic-*.ts（Node ≥ 22.6 的类型剥离，见 scripts/load-topic-bank.cjs）。
+// 题库只有一份真源：仓库的 data/topic-*.js（纯数据，普通 require 就能读，见 scripts/load-topic-bank.cjs）。
 // 网页端直接在仓库里跑，运行期读的就是它，改完题库重启服务即生效，没有第二份副本要同步。
 // 所以 web/ 必须与 data/ 一起部署（整个仓库一起上，或至少这两个目录保持相对位置）。
-const REPO_DATA_DIR = path.join(__dirname, "../../data");
-
 const { buildCatalogFromRepo, summarize } = require("./catalog.cjs");
 
 const TYPES = ["single", "judge", "fill"];

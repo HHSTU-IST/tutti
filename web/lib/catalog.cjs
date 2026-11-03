@@ -22,7 +22,7 @@ function summarize(topics) {
   };
 }
 
-// 直接从仓库的 data/topic-*.ts 构建课程清单（构建脚本与开发态回退共用这一份逻辑）。
+// 直接从仓库的 data/topic-*.js 构建课程清单（构建脚本与开发态回退共用这一份逻辑）。
 // 课程标题、专题顺序与专题名都取自题库 `_config`——与小程序端 services/registry.ts 同源，
 // 不再正则解析 registry.ts（那份元数据已下沉到题库）。
 function buildCatalogFromRepo() {
@@ -30,8 +30,8 @@ function buildCatalogFromRepo() {
 
   return fs
     .readdirSync(REPO_DATA_DIR)
-    .filter(file => /^topic-.*\.ts$/.test(file))
-    .map(file => file.replace(/^topic-/, "").replace(/\.ts$/, ""))
+    .filter(file => /^topic-.*\.js$/.test(file))
+    .map(file => file.replace(/^topic-/, "").replace(/\.js$/, ""))
     .sort()
     .map(id => {
       const bank = loadTopicBank(id);

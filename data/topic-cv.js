@@ -1,4 +1,8 @@
-const data: import("../types/quiz-bank").QuizBank = {
+// 图像处理课程（纯数据题库）。
+// 下面 `module.exports =` 之后必须是一段能被严格 JSON.parse 解析的 JSON 文本：
+// 不要加注释、尾逗号、单引号字符串或 TypeScript 语法——scripts/topic-bank.test.cjs 会逐题校验，
+// 网页端、组卷脚本与小程序读的都是这个文件。
+module.exports = {
     "_config": {
         "title": "图像处理课程",
         "topicOrder": [
@@ -1516,5 +1520,3 @@ const data: import("../types/quiz-bank").QuizBank = {
         }
     ]
 };
-
-export = data;

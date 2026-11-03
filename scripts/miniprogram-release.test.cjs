@@ -69,7 +69,7 @@ test("小程序 TypeScript 文件语法可解析", () => {
 
   MINIPROGRAM_SOURCES.forEach(file => {
     try {
-      Module.stripTypeScriptTypes(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), { mode: "transform" });
+      Module.stripTypeScriptTypes(fs.readFileSync(path.join(__dirname, "..", file), "utf8"));
     } catch (error) {
       broken.push(`${file}: ${error.message}`);
     }

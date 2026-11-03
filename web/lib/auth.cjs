@@ -14,9 +14,12 @@ const PBKDF2_ITERATIONS = 120000;
 const SESSION_COOKIE = "sid";
 const COOKIE_SECURE = !(process.env.TUTTI_COOKIE_SECURE === "0" || String(process.env.TUTTI_COOKIE_SECURE).toLowerCase() === "false");
 
-// 历史默认密码，只用于「上线自检」检出现存账号是否还在用：
-// 新部署由 manage-accounts.cjs 随机生成，不再产生这两个口令。
-const DEFAULT_PASSWORDS = { admin: "admin2026", demo: "demo2026" };
+// 这两个口令曾经随 `data/accounts.json` 提交进仓库（03c6590 引入、2535eaf 删除，但 blob 仍在历史里，
+// 且已被实测还原）。所以它们不再是「默认密码」，而是「公开泄露的密码」：任何账号命中都要拒绝登录，
+// 只有本地演示可以显式放行（TUTTI_ALLOW_LEAKED_PASSWORDS=1）。新部署由 manage-accounts.cjs 随机生成口令。
+const LEAKED_PASSWORDS = ["admin2026", "demo2026"];
+const ALLOW_LEAKED_PASSWORDS = process.env.TUTTI_ALLOW_LEAKED_PASSWORDS === "1"
+  || String(process.env.TUTTI_ALLOW_LEAKED_PASSWORDS || "").toLowerCase() === "true";
 
 // 会话存储（TUTTI_SESSION_STORE）：
 // - file（默认）：一个会话一个 JSON 文件，落在运行数据目录的 sessions/ 下。
@@ -95,14 +98,55 @@ function publicUser(user) {
   };
 }
 
-// 上线自检：检出仍在用历史默认密码的账号（新部署不会产生这类账号）。
+// 某个账号的口令是否命中公开泄露的那几个值。
+function isLeakedPassword(user) {
+  return LEAKED_PASSWORDS.some(candidate => verifyPassword(user, candidate));
+}
+
+// 上线自检：检出仍在用泄露口令的账号（不限用户名，只要口令命中就算）。
 function findUsersWithDefaultPassword() {
   return readAccounts()
-    .users.filter(user => {
-      const candidate = DEFAULT_PASSWORDS[user.username];
-      return candidate ? verifyPassword(user, candidate) : false;
-    })
+    .users.filter(user => isLeakedPassword(user))
     .map(user => user.username);
+}
+
+// 吊销这些账号已有的会话：文件存储逐个删文件，内存存储逐个 delete。
+function revokeSessionsForUsernames(usernames) {
+  const targets = new Set(usernames.map(name => String(name || "").trim()));
+  if (!targets.size) return 0;
+
+  let revoked = 0;
+
+  memorySessions.forEach((session, token) => {
+    if (!targets.has(session.username)) return;
+    memorySessions.delete(token);
+    quizByToken.delete(token);
+    revoked += 1;
+  });
+
+  if (!useFileStore()) return revoked;
+
+  let names;
+  try {
+    names = fs.readdirSync(SESSION_DIR);
+  } catch (error) {
+    return revoked;
+  }
+
+  names.filter(name => name.endsWith(".json")).forEach(name => {
+    const file = path.join(SESSION_DIR, name);
+    try {
+      const record = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (!record || !targets.has(String(record.username || ""))) return;
+      fs.rmSync(file, { force: true });
+      quizByToken.delete(path.basename(name, ".json"));
+      revoked += 1;
+    } catch (error) {
+      // 读不出来的会话文件交给过期清理，不在这里猜。
+    }
+  });
+
+  return revoked;
 }
 
 function isValidToken(token) {
@@ -316,7 +360,8 @@ function expiredCookie() {
 
 module.exports = {
   ACCOUNTS_PATH,
-  DEFAULT_PASSWORDS,
+  ALLOW_LEAKED_PASSWORDS,
+  LEAKED_PASSWORDS,
   SESSION_COOKIE,
   SESSION_DIR,
   SESSION_STORE,
@@ -331,9 +376,11 @@ module.exports = {
   getSession,
   getSessionQuiz,
   hashPassword,
+  isLeakedPassword,
   parseCookies,
   publicUser,
   readAccounts,
+  revokeSessionsForUsernames,
   sessionCookie,
   sessionStoreInfo,
   setSessionQuiz,

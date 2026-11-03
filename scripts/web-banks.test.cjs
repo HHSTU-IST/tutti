@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 
-// 网页端题库只有一份真源：仓库 data/topic-*.ts。
+// 网页端题库只有一份真源：仓库 data/topic-*.js（纯数据，普通 require 读）。
 // 这里既验「读的就是它」，也顺带守住「别再往 web/data 下复制一份副本」。
 const banks = require("../web/lib/banks.cjs");
 const { buildCatalogFromRepo } = require("../web/lib/catalog.cjs");
@@ -17,7 +17,7 @@ function courseSummary(courses) {
   }));
 }
 
-test("题库直接来自 data/topic-*.ts，不再有第二份副本", () => {
+test("题库直接来自 data/topic-*.js，不再有第二份副本", () => {
   const expected = buildCatalogFromRepo().map(entry => {
     const { bank, ...course } = entry;
     const topics = course.topics.map(topic => ({

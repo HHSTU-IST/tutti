@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 网页版运行自检：账号表、默认密码、会话存储、运行数据目录。
+// 网页版运行自检：账号表、历史泄露口令、会话存储、运行数据目录。
 // 启动服务前跑一遍（或接进自己的部署流程）：每项打印 [OK] / [!!] / [提示]，有 [!!] 时退出码为 1。
 const auth = require("../web/lib/auth.cjs");
 const uploadRules = require("../web/lib/upload-rules.cjs");
@@ -31,10 +31,13 @@ function checkAccounts() {
   const risky = auth.findUsersWithDefaultPassword();
   report(
     risky.length === 0,
-    "默认密码已替换",
+    "无账号使用已公开的历史口令",
     risky.length
-      ? `仍在用历史默认密码：${risky.join("、")}\n处理：node scripts/manage-accounts.cjs passwd ${risky[0]} --random，然后重启服务`
-      : "未检出 admin2026 / demo2026"
+      ? `命中 admin2026 / demo2026（这两个值曾随 data/accounts.json 进 git 历史，已被还原）：${risky.join("、")}\n`
+        + "服务端会直接拒绝这些账号登录（403）。\n"
+        + `处理：node scripts/manage-accounts.cjs passwd ${risky[0]} --random，然后重启服务；`
+        + "本地演示要放行才设 TUTTI_ALLOW_LEAKED_PASSWORDS=1"
+      : "未检出已公开的历史口令"
   );
 }
 

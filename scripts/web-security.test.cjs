@@ -28,7 +28,9 @@ fs.writeFileSync(
     users: [
       makeUser("admin", "admin-pwd", "admin", []),
       makeUser("student", "student-pwd", "user", ["py"]),
-      makeUser("ratelimit", "ratelimit-pwd", "user", ["py"])
+      makeUser("ratelimit", "ratelimit-pwd", "user", ["py"]),
+      // 口令在 git 历史里公开过的那个值：登录必须被拒绝（见 P0-3）。
+      makeUser("legacy", "admin2026", "user", ["py"])
     ]
   })
 );
@@ -295,4 +297,15 @@ test("fill 分支两端引擎 correctAnswer 与 options 一致", () => {
     });
   });
   assert.ok(compared > 0, "没有比对任何填空题");
+});
+
+test("口令命中 git 历史里公开过的值：验对也拒绝登录（403），不发会话", async () => {
+  const blocked = await login("legacy", "admin2026");
+
+  assert.equal(blocked.status, 403, "泄露口令不该换到会话");
+  assert.match(String(blocked.data && blocked.data.error || ""), /默认密码/, "要告诉管理员怎么修");
+  assert.equal(cookie, "", "403 不应带 Set-Cookie");
+
+  const ok = await login("student", "student-pwd");
+  assert.equal(ok.status, 200, "正常账号登录不受影响");
 });
