@@ -164,8 +164,7 @@ function main() {
     user.courses = parseCourses(raw);
     user.updatedAt = new Date().toISOString();
     save(accounts.users);
-    // 改课不需要吊销会话：getSession 每次都会按实时账号表重算权限，进行中的会话下一个请求就生效。
-    console.log(`${username} 已购课程: ${user.courses.join(", ") || "无"}（进行中的会话会立即按新课程生效，无需重新登录）`);
+    console.log(`${username} 已购课程: ${user.courses.join(", ") || "无"}`);
     return;
   }
 
@@ -187,10 +186,7 @@ function main() {
     user.hash = auth.hashPassword(password, user.salt);
     user.updatedAt = new Date().toISOString();
     save(accounts.users);
-    // 换密码要顺带把该账号已有的会话踢掉：尤其从泄露的默认密码轮换过来时，不能让旧会话继续有效。
-    const revoked = auth.revokeSessionsForUsernames([username]);
-    const revokedNote = revoked ? `（已注销 ${revoked} 个进行中的会话）` : "";
-    console.log(generated ? `已更新 ${username} 的密码：${password}（只显示这一次，请立即记录）${revokedNote}` : `已更新 ${username} 的密码。${revokedNote}`);
+    console.log(generated ? `已更新 ${username} 的密码：${password}（只显示这一次，请立即记录）` : `已更新 ${username} 的密码。`);
     return;
   }
 
@@ -202,11 +198,7 @@ function main() {
       return;
     }
     save(accounts.users.filter(user => user.username !== username));
-    // 删号后 getSession 会走「账号不在表里→保留快照」的分支，光删记录并不能让在线会话失效；
-    // 必须在这里直接吊销会话文件，删号才即时生效。
-    const revoked = auth.revokeSessionsForUsernames([username]);
-    const revokedNote = revoked ? `，并注销了 ${revoked} 个进行中的会话` : "";
-    console.log(`已删除 ${username}${revokedNote}。`);
+    console.log(`已删除 ${username}。`);
     return;
   }
 

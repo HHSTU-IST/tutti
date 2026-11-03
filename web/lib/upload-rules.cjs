@@ -241,7 +241,7 @@ function withIndexLock(mutate) {
   const lockPath = indexLockPath();
   const deadline = Date.now() + LOCK_ACQUIRE_TIMEOUT_MS;
 
-  for (;;) {
+  for (; ;) {
     let fd;
     try {
       fd = fs.openSync(lockPath, "wx"); // O_CREAT|O_EXCL：只有第一个进程能建成，天然的互斥
