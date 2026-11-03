@@ -8,7 +8,7 @@
 
 - **框架**: 微信小程序原生框架
 - **页面**: WXML + WXSS + TypeScript
-- **题库**: 本地 `data/topic-*.ts`，全部内置于同一小程序
+- **题库**: 本地 `data/topic-*.js`（纯数据），全部内置于同一小程序
 - **题库类型**: 共享类型 `types/quiz-bank.ts`
 - **智能体开关**: 本地测试开关 `data/access.ts`，生产默认全部为 `false`（由后台 `agents` 决定）
 - **登录**: 仅支持微信登录，生产走 `login` 云函数（`cloud.getWXContext()` 取 openid，无需自建后台）
@@ -22,7 +22,7 @@
 
 ```text
 ├── cloudfunctions/ # 云函数：login（getWXContext 取 openid + 按 user_profiles.agents 返回开通）
-├── data/           # 题库 data/topic-*.ts、本地测试开关、网页端账号表
+├── data/           # 题库 data/topic-*.js（纯数据）、本地测试开关、网页端账号表
 ├── docs/           # 项目文档：development.md（本文件）、design.md（试卷智能体设计）
 ├── outputs/        # 试卷脚本的生成物（.md / .docx）
 ├── pages/          # 小程序页面
@@ -36,7 +36,7 @@
 
 ## 题库与答题引擎
 
-- **题库加载**：`data/topic-*.ts` 按课程存储题库，格式符合 `QuizBank` 接口
+- **题库加载**：`data/topic-*.js` 按课程存储题库，是纯数据文件（`module.exports = { …JSON 文本… }`），结构符合 `QuizBank` 接口
 - **答题引擎**：`services/quiz-engine.ts` 提供题目抽取、洗牌、选项随机化等核心功能
 - **页面渲染**：`pages/quiz/` 负责小程序端的题目展示和交互
 - **题型支持**：单选题、判断题、填空题
@@ -113,7 +113,7 @@ module.exports = {
 
 ### 新增一门课程（智能体）
 
-1. 新建题库 `data/topic-<id>.ts`，在 `_config` 里写好 `title`、`topicOrder`、`topicNameMap`；
+1. 新建题库 `data/topic-<id>.js`（纯数据，`module.exports =` 之后必须是严格合法的 JSON 文本），在 `_config` 里写好 `title`、`topicOrder`、`topicNameMap`；
 2. 在 `services/registry.ts` 的 `AGENT_REGISTRY` 里登记 `{ id, bank }`（只需这两项）；
 3. 在 `data/access.ts` 里加该课程的本地测试开关（生产不受它影响，开通由后台 `agents` 决定）；
 4. 跑 `node --test`：注册表对齐、专题与题量校验都在 `scripts/topic-bank.test.cjs` 里；
@@ -121,15 +121,15 @@ module.exports = {
 
 ## 网页版实现
 
-网页版把同一套 `data/topic-*.ts` 题库发布到浏览器，**题库权限由账号决定**：已付费课程可选，未付费课程不可选，管理员账号可进入全部题库。
+网页版把同一套 `data/topic-*.js` 题库发布到浏览器，**题库权限由账号决定**：已付费课程可选，未付费课程不可选，管理员账号可进入全部题库。
 
 ### 题库来源
 
-`web/lib/banks.cjs` 启动时用 `web/lib/catalog.cjs` 的 `buildCatalogFromRepo()` 直接读仓库的 `data/topic-*.ts`（经 `scripts/load-topic-bank.cjs` → `scripts/load-ts-module.cjs`，用 Node ≥ 22.6 的类型剥离）。没有构建步骤、也没有第二份副本：改完题库重启服务即生效。
+`web/lib/banks.cjs` 启动时用 `web/lib/catalog.cjs` 的 `buildCatalogFromRepo()` 直接读仓库的 `data/topic-*.js`（经 `scripts/load-topic-bank.cjs`，就是普通 `require`——题库是纯数据，不需要类型剥离）。没有构建步骤、也没有第二份副本：改完题库重启服务即生效。
 
-`load-ts-module.cjs` 只让 Node 干「删类型标注」这一件事（strip 模式；会顺带改写模块格式的 transform 模式在新版 Node 上已经取消，别依赖它），ESM→CommonJS 由文件里那几条显式规则完成。因此**被 Node 侧加载的 TS 文件只用这几种写法**：type-only import（`import type { X } from "..."`）、`export function` / `export class` / `export const`、`export = <标识符>;`（题库与 `data/access.ts` 的写法）。用了别的 ESM 语法或不可擦除语法（`enum`、`namespace`、构造函数参数属性、`export = 表达式`）会立刻抛错并指名文件，不会静默跑成半个模块。
+`load-ts-module.cjs` 只让 Node 干「删类型标注」这一件事（strip 模式；会顺带改写模块格式的 transform 模式在新版 Node 上已经取消，别依赖它），ESM→CommonJS 由文件里那几条显式规则完成。它现在只负责 `services/quiz-engine.ts`、`services/upload-rules.ts`、`data/access.ts` 这几个 TS 模块（题库已改为纯数据 `.js`，不走这条路）。因此**被 Node 侧加载的 TS 文件只用这几种写法**：type-only import（`import type { X } from "..."`）、`export function` / `export class` / `export const`、`export = <标识符>;`（`data/access.ts` 的写法）。用了别的 ESM 语法或不可擦除语法（`enum`、`namespace`、构造函数参数属性、`export = 表达式`）会立刻抛错并指名文件，不会静默跑成半个模块。
 
-代价是一条部署约束：**`web/` 与 `data/` 必须一起存在**（服务读的是 `../data/topic-*.ts`），只拷贝 `web/` 目录是跑不起来的。课程标题与专题顺序同样取自题库 `_config`，与小程序端 `services/registry.ts` 同源。
+代价是一条部署约束：**`web/` 与 `data/` 必须一起存在**（服务读的是 `../data/topic-*.js`），只拷贝 `web/` 目录是跑不起来的。课程标题与专题顺序同样取自题库 `_config`，与小程序端 `services/registry.ts` 同源。
 
 ### 权限模型
 
@@ -140,9 +140,9 @@ module.exports = {
 
 ### 会话与运行数据
 
-- **会话默认落盘**：一个会话一个 JSON 文件，放在 `${TUTTI_DATA_DIR}/sessions/`，进程重启不掉线。多实例把 `TUTTI_DATA_DIR` 指向同一持久化目录即共用会话，注销立即生效（每个请求都会核对文件）。
+- **会话默认落盘**：一个会话一个 JSON 文件，放在 `${TUTTI_DATA_DIR}/sessions/`，进程重启不掉线。多实例把 `TUTTI_DATA_DIR` 指向同一持久化目录即共用会话；每个请求都会核对文件，别处注销立即失效。权限也是每个请求按实时账号表重算的——`manage-accounts.cjs courses` 改课、或把账号提为管理员，进行中的会话下一个请求就生效，无需重新登录（删号则靠 `remove` 直接吊销该用户的会话文件）。
 - 目录本身不共享时得自己接 Redis 之类共享存储，或设 `TUTTI_SESSION_STORE=memory` 退回单进程内存（重启掉线）。
-- **进行中的练习只在内存**：组卷结果（含答案）不落盘，重启后重新组卷即可，已答题目与错题记录以浏览器端为准。
+- **进行中的练习只在内存、且不跨实例共享**：组卷结果（含答案）不落盘（落盘会把答案写进磁盘、扩大泄露面），重启后重新组卷即可，已答题目与错题记录以浏览器端为准。代价是它在多实例轮询下会出问题——「在 A 实例组卷、判题打到 B 实例」会直接报「当前没有进行中的练习」。**本网页版按单实例设计**；若确需多实例，负载均衡必须开启会话粘滞（同一浏览器固定路由到同一实例）。启动日志与 `server.deploymentWarnings()` 会把这一点显式提示出来。
 - **上传文件落磁盘**：作业在 `${TUTTI_DATA_DIR}/uploads/`、管理员规则在 `${TUTTI_DATA_DIR}/upload-rules.json`，默认落在 `web/data`——该目录随发布一起被覆盖，线上必须把 `TUTTI_DATA_DIR` 指到持久化目录。
 - **启动记录**：每次启动都会更新 `${TUTTI_DATA_DIR}/runtime-state.json`（`firstBootAt` / `lastBootAt` / `boots`）。`GET /api/health` 会回显 `boots` 与 `firstBootAt`：重新发布后这两个值若重置，说明平台重建了数据目录，上传规则与作业其实没被保住——这是判断「目录到底持不持久」的唯一实测依据，别靠猜。
 - 会话 id 会被拼进文件名，所以读取前先卡 `^[a-f0-9]{32,128}$`，挡掉 `../` 这类路径穿越写法。
@@ -211,7 +211,7 @@ node scripts/manage-accounts.cjs remove 张三                            # 删�
 
 `init` 建的两个账号是 `admin`（管理员，全部题库）与 `demo`（仅 `py`）。密码不是固定的：默认随机生成并在 `init` 时打印一次，也可以在 `init` 前用 `TUTTI_ADMIN_PASSWORD` / `TUTTI_DEMO_PASSWORD` 指定。
 
-> 账号真源是 `data/accounts.json`，CLI 只改这一处，服务端读的也是这一处：改完重启服务即生效。已经在用的人要重新登录一次，才会带上新的课程权限（会话里的解锁课程是登录时定的）。
+> 账号真源是 `data/accounts.json`，CLI 与服务端读的是同一份。改课（`courses`）或改角色**不用重启、也不用重新登录**就生效：服务端每个请求都按实时账号表重算会话权限（见 [会话与运行数据](#会话与运行数据)）。`passwd` 会顺带吊销该账号已有的会话，`remove` 会直接删掉它的会话文件，所以改密/删号也是即时生效。只有代码逻辑本身的改动才需要重启服务。
 
 #### 历史口令泄露的处置（必读）
 

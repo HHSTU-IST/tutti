@@ -83,7 +83,7 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 
 ```text
 ├── cloudfunctions/ # 云函数：login（取 openid + 返回课程开通）
-├── data/       # 题库 data/topic-*.ts、本地测试开关、网页端账号表
+├── data/       # 题库 data/topic-*.js（纯数据）、本地测试开关、网页端账号表
 ├── docs/       # development.md、design.md
 ├── outputs/    # 试卷脚本的生成物
 ├── pages/      # 小程序页面
@@ -97,7 +97,7 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 
 ## 部署与运行
 
-两条发布通道共用 `data/topic-*.ts` 这一份题库，可只上一边，也可两边都上。
+两条发布通道共用 `data/topic-*.js` 这一份题库，可只上一边，也可两边都上。
 
 > **运行环境**：Node ≥ 22.6.0（`web/package.json` 的 `engines` 已声明，用系统里装好的 Node 即可；网页版与小程序零依赖，不需要 `npm install`）。例外是**组卷的 Word 导出**：还要 `pandoc`，以及 `pyproject.toml` 声明的 Python 依赖（`defusedxml`，装在项目 `.venv` 里，`uv sync` 即可；脚本会优先用 `.venv` 的解释器）。小程序端由微信开发者工具编译，不受 Node 版本限制。
 
@@ -108,7 +108,7 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 
 ### 网页版部署
 
-网页版就是仓库里的一个 Node 服务：**没有构建步骤，也没有需要同步的副本**。题库（`data/topic-*.ts`）与账号表（`data/accounts.json`）都是运行期直接读的，改完重启服务即生效。
+网页版就是仓库里的一个 Node 服务：**没有构建步骤，也没有需要同步的副本**。题库（`data/topic-*.js`，纯数据）与账号表（`data/accounts.json`）都是运行期直接读的，改完重启服务即生效。
 
 ```bash
 # 1) 初始化账号（仅首次；密码随机生成并只打印一次）
@@ -123,15 +123,17 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 node scripts/web-deploy-check.cjs
 ```
 
-- **运行形态**：任何能跑 Node 的主机起这一个进程即可，前面挂 Nginx 做 HTTPS 与反向代理。服务默认监听 `PORT` 并绑定 `0.0.0.0`。
-- **`web/` 与 `data/` 要在一起**：服务运行期读的是 `../data/topic-*.ts` 与 `../data/accounts.json`，所以部署时带上整个仓库，或至少保持这两个目录的相对位置。
-- **运行期环境变量**：除 `PORT` / `HOST` 外还有三个与数据落盘相关的变量。
+- **运行形态**：任何能跑 Node 的主机起这一个进程即可，前面挂 Nginx 做 HTTPS 与反向代理。服务默认监听 `PORT` 并绑定 `0.0.0.0`。**本网页版按单实例设计**：登录会话可落盘共享，但「进行中的练习」（组卷答案、判题进度）只在单个进程内存里、不跨实例共享，多实例轮询会让答题中途报「没有进行中的练习」。确实要横向扩容时，请在反向代理上开启会话粘滞（同一浏览器固定打到同一实例）。
+- **`web/` 与 `data/` 要在一起**：服务运行期读的是 `../data/topic-*.js` 与 `../data/accounts.json`，所以部署时带上整个仓库，或至少保持这两个目录的相对位置。
+- **运行期环境变量**：除 `PORT` / `HOST` 外，数据落盘、会话、限流与上传相关的可调项如下。
 
   | 变量                  | 默认值                      | 作用                                           |
   | --------------------- | --------------------------- | ---------------------------------------------- |
   | `TUTTI_DATA_DIR`      | `web/data`                  | 运行数据目录：会话、上传规则、学员作业都落这里 |
   | `TUTTI_SESSION_STORE` | `file`                      | `file` 落盘（重启不掉线）/ `memory` 纯进程内存 |
   | `TUTTI_SESSION_DIR`   | `<TUTTI_DATA_DIR>/sessions` | 单独指定会话目录，一般不用改                   |
+  | `TUTTI_TRUST_PROXY`   | 未设置（关）                | 仅在可信反向代理后面设为 `1`，才据 `x-forwarded-for` 取真实来源 IP 做登录限流；直连时保持默认，否则该头可被伪造、限流形同虚设 |
+  | `TUTTI_MAX_CONCURRENT_UPLOADS` | `8`              | 同时处理的上传数上限（base64 整份进内存，用它兜住内存峰值） |
   | `TUTTI_ALLOW_LEAKED_PASSWORDS` | 未设置               | 仅本地演示：放行命中历史泄露口令的账号（线上别设） |
 
   默认的 `web/data` 就在应用目录里，更新代码时容易被一并覆盖。想长期保留登录态、上传规则与学员作业，就把它指到应用目录之外，之后用 `GET /api/health` 的 `dataDirBoots` / `dataDirFirstBootAt` 复核（重启后 `boots` 继续累加、`firstBootAt` 不变即为正常）：
@@ -145,7 +147,7 @@ node scripts/web-deploy-check.cjs
 
 **部署清单**：启动前逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/web-deploy-check.cjs` 自检，退出码非 0 即还有未通过项）。
 
-**更新与回滚**：拉代码后重启服务即生效（改题库、改账号、改上传规则都是这样）；代码回滚就切回旧版本再重启。动手前先备份 `data/accounts.json` 与整个 `TUTTI_DATA_DIR`。
+**更新与回滚**：拉代码后重启服务即生效；改上传规则也即时生效（下一个请求就按新规则校验）。改账号尤其简单——课程/角色的调整由服务端每个请求按实时账号表重算，进行中的会话无需重新登录，`passwd` / `remove` 还会顺带吊销该账号的会话。动手前先备份 `data/accounts.json` 与整个 `TUTTI_DATA_DIR`。
 
 ### 小程序部署
 

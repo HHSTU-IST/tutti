@@ -32,7 +32,9 @@ const TOKEN_PATTERN = /^[a-f0-9]{32,128}$/;
 const PURGE_INTERVAL_MS = 10 * 60 * 1000;
 
 const memorySessions = new Map();
-// 进行中的练习只存内存：正确答案不下发，重启后重开即可，不值得落盘。
+// 进行中的练习只存内存：正确答案不下发、也不落盘（落盘会把答案写进磁盘，扩大泄露面），
+// 重启后重开即可。代价是它不跨进程/实例共享——多实例部署必须让组卷与判题落到同一实例
+// （会话粘滞），否则中途会报「当前没有进行中的练习」。见 server.deploymentWarnings()。
 const quizByToken = new Map();
 let fileStoreDisabled = false;
 let lastPurgeAt = 0;
@@ -58,6 +60,18 @@ function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(String(password), salt, PBKDF2_ITERATIONS, 32, "sha256").toString("hex");
 }
 
+// 登录热路径专用的异步版：pbkdf2 迭代 12 万次是 CPU 密集操作，同步版会把整个事件循环
+// 卡住几百毫秒——单条慢查询就能拖垮所有并发请求。异步版把它丢进 libuv 线程池。
+// 同步版仍保留给启动自检（findUsersWithDefaultPassword 只在开机时跑一次，阻塞无所谓）。
+function hashPasswordAsync(password, salt) {
+  return new Promise((resolve, reject) => {
+    crypto.pbkdf2(String(password), salt, PBKDF2_ITERATIONS, 32, "sha256", (error, derived) => {
+      if (error) return reject(error);
+      resolve(derived.toString("hex"));
+    });
+  });
+}
+
 function readAccounts() {
   if (!fs.existsSync(ACCOUNTS_PATH)) {
     return { version: 1, users: [] };
@@ -75,8 +89,17 @@ function findUser(username) {
 }
 
 function verifyPassword(user, password) {
-  const actual = Buffer.from(hashPassword(password, user.salt), "hex");
-  const expected = Buffer.from(user.hash, "hex");
+  return matchesHash(hashPassword(password, user.salt), user.hash);
+}
+
+// verifyPassword 的异步对应物，登录热路径走它，避免 12 万次 pbkdf2 阻塞事件循环。
+async function verifyPasswordAsync(user, password) {
+  return matchesHash(await hashPasswordAsync(password, user.salt), user.hash);
+}
+
+function matchesHash(actualHex, expectedHex) {
+  const actual = Buffer.from(String(actualHex), "hex");
+  const expected = Buffer.from(String(expectedHex), "hex");
   if (actual.length !== expected.length) return false;
   return crypto.timingSafeEqual(actual, expected);
 }
@@ -101,6 +124,14 @@ function publicUser(user) {
 // 某个账号的口令是否命中公开泄露的那几个值。
 function isLeakedPassword(user) {
   return LEAKED_PASSWORDS.some(candidate => verifyPassword(user, candidate));
+}
+
+// 登录热路径的异步版：逐个候选口令串行做异步 pbkdf2，不在事件循环里同步算。
+async function isLeakedPasswordAsync(user) {
+  for (const candidate of LEAKED_PASSWORDS) {
+    if (await verifyPasswordAsync(user, candidate)) return true;
+  }
+  return false;
 }
 
 // 上线自检：检出仍在用泄露口令的账号（不限用户名，只要口令命中就算）。
@@ -270,8 +301,8 @@ function createSession(user) {
 function getSession(token) {
   if (!isValidToken(token)) return null;
 
-  // 文件存储每个请求都核对文件：别处注销、课程权限变更都能立刻反映到本实例。
-  if (useFileStore()) return readSessionFile(token);
+  // 文件存储每个请求都核对文件；无论哪种存储，都再按实时账号表重算一次权限（见下）。
+  if (useFileStore()) return applyLiveEntitlements(readSessionFile(token));
 
   const session = memorySessions.get(token);
   if (!session) return null;
@@ -281,7 +312,30 @@ function getSession(token) {
     return null;
   }
 
-  return session;
+  return applyLiveEntitlements(session);
+}
+
+// 会话里的权限是登录那一刻的快照。账号被改课/改角色后，只要账号还在表里，就按实时表重算，
+// 收课、升降权当场生效，不用等用户重新登录。账号已被删除时这里取不到（findUser 返回 null），
+// 就原样返回快照——删号的即时失效不靠这里，而是 manage-accounts 直接吊销该用户的会话文件；
+// 这一分支同时兼容测试里用合成账号（表里没有）建出来的会话。
+function applyLiveEntitlements(session) {
+  if (!session) return null;
+
+  const user = findUser(session.username);
+  if (!user) return session;
+
+  const unlocked = resolveEntitlements(user);
+  const isAdmin = user.role === "admin";
+  if (user.role === session.role && isAdmin === session.isAdmin && sameCourseIds(unlocked, session.unlocked)) {
+    return session;
+  }
+
+  return Object.assign({}, session, { role: user.role, isAdmin, unlocked });
+}
+
+function sameCourseIds(a, b) {
+  return Array.isArray(b) && a.length === b.length && a.every((id, index) => id === b[index]);
 }
 
 function destroySession(token) {
@@ -376,7 +430,9 @@ module.exports = {
   getSession,
   getSessionQuiz,
   hashPassword,
+  hashPasswordAsync,
   isLeakedPassword,
+  isLeakedPasswordAsync,
   parseCookies,
   publicUser,
   readAccounts,
@@ -385,5 +441,6 @@ module.exports = {
   sessionStoreInfo,
   setSessionQuiz,
   verifyPassword,
+  verifyPasswordAsync,
   writeAccounts
 };

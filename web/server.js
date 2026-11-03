@@ -5,6 +5,8 @@ const path = require("path");
 const banks = require("./lib/banks.cjs");
 const auth = require("./lib/auth.cjs");
 const uploadRules = require("./lib/upload-rules.cjs");
+const rateLimit = require("./lib/rate-limit.cjs");
+const { createUploadGate } = require("./lib/upload-gate.cjs");
 const { ensureWritable, isInsideAppDir } = require("./lib/data-dir.cjs");
 const { checkNodeVersion } = require("./lib/node-version.cjs");
 const { markBoot, readState } = require("./lib/runtime-state.cjs");
@@ -13,24 +15,18 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const MAX_BODY_BYTES = 1024 * 1024;
-// 上传走 base64，体积会膨胀约 1/3，单独放宽上限。
-const UPLOAD_BODY_LIMIT = 25 * 1024 * 1024;
+// 上传 body 上限不再写死：按当前规则的 maxSizeMb 现算（见 upload-rules.uploadBodyLimitBytes），
+// 并用并发闸门兜住同时传输带来的内存峰值，而不是用一个和规则脱节的固定值卡死合规的大文件。
+const uploadGate = createUploadGate();
 
-// 登录失败限流：按「IP + 用户名」计数，连续失败超过阈值后短时锁定，防爆破。
-const LOGIN_FAIL_LIMIT = 5;
-const LOGIN_LOCK_MS = 60 * 1000;
-const loginFailures = new Map();
+// 是否采信 x-forwarded-for：默认否。只有确信站在可信反向代理后面（平台会覆盖该头）才设
+// TUTTI_TRUST_PROXY=1。直连时它可由客户端伪造，盲信等于把限流 key 交给攻击者挑。
+const TRUST_PROXY = rateLimit.trustProxyEnabled();
+// 登录失败限流：按「IP + 用户名」挡单账号爆破，另有一条更高的按 IP 兜底挡凭证喷洒。
+const loginThrottle = rateLimit.createLoginThrottle();
 
 function clientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) return String(forwarded).split(",")[0].trim();
-  return req.socket.remoteAddress || "unknown";
-}
-
-function pruneLoginFailures(now) {
-  loginFailures.forEach((record, key) => {
-    if (now - record.lastAttempt >= LOGIN_LOCK_MS) loginFailures.delete(key);
-  });
+  return rateLimit.resolveClientIp(req, TRUST_PROXY);
 }
 
 const MIME_TYPES = {
@@ -55,14 +51,24 @@ function sendJson(res, status, payload) {
 function readJsonBody(req, limitBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     let raw = "";
+    let settled = false;
+
     req.on("data", chunk => {
+      // 已判定超限或已处理：直接丢弃后续数据，raw 不再增长，内存被卡在 limitBytes 附近。
+      if (settled) return;
       raw += chunk;
       if (raw.length > limitBytes) {
-        reject(new Error("请求体过大"));
-        req.destroy();
+        settled = true;
+        const error = new Error("请求体过大");
+        error.code = "PAYLOAD_TOO_LARGE";
+        // 这里不 destroy：过早拆连接会让客户端只看到 ECONNRESET，收不到带根因的响应。
+        reject(error);
       }
     });
+
     req.on("end", () => {
+      if (settled) return;
+      settled = true;
       if (!raw) return resolve({});
       try {
         resolve(JSON.parse(raw));
@@ -70,8 +76,34 @@ function readJsonBody(req, limitBytes = MAX_BODY_BYTES) {
         reject(new Error("请求体不是合法 JSON"));
       }
     });
-    req.on("error", reject);
+
+    req.on("error", () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("请求读取中断"));
+    });
   });
+}
+
+// 上传超大：先把带根因的 413 写出去，但保持连接、把客户端剩余上传字节排空丢弃
+// （data 事件在 settled 后直接 return，不缓冲、内存有界）。
+// 不能 destroy、也不能 Connection: close——那会在客户端还在上传时把连接掐断，
+// 让它只收到 ECONNRESET 而读不到这个响应。等它传完，自然读到我们先前写好的 413。
+function respondUploadError(res, req, error) {
+  if (error && error.code === "PAYLOAD_TOO_LARGE") {
+    if (!res.headersSent) {
+      const body = JSON.stringify({ error: uploadRules.describeUploadOversize() });
+      res.writeHead(413, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": Buffer.byteLength(body),
+        "Cache-Control": "no-store"
+      });
+      res.end(body);
+    }
+    req.resume();
+    return undefined;
+  }
+  return sendJson(res, 400, { error: error.message });
 }
 
 function currentSession(req) {
@@ -93,25 +125,43 @@ function canAccess(session, courseId) {
   return session.isAdmin || session.unlocked.includes(courseId);
 }
 
-function handleLogin(req, res, body) {
-  const username = String(body.username || "").trim();
-  const key = `${clientIp(req)}:${username}`;
-  const now = Date.now();
-  pruneLoginFailures(now);
+// 账号不存在时也照跑一次 pbkdf2 的量级，让「用户名不存在」与「密码错误」耗时接近，
+// 堵住用响应时间枚举有效用户名这条路。盐固定即可，结果本来就要丢弃。
+const TIMING_GUARD_SALT = "00000000000000000000000000000000";
 
-  const failure = loginFailures.get(key);
-  if (failure && failure.count >= LOGIN_FAIL_LIMIT && now - failure.lastAttempt < LOGIN_LOCK_MS) {
-    return sendJson(res, 429, { error: "尝试次数过多，请稍后再试" });
+async function handleLogin(req, res, body) {
+  const ip = clientIp(req);
+  const username = String(body.username || "").trim();
+  const password = String(body.password || "");
+
+  const gate = loginThrottle.check(ip, username);
+  if (gate.blocked) {
+    return sendJson(res, 429, {
+      error: gate.scope === "ip"
+        ? "该来源短时间登录失败过多，请稍后再试"
+        : "尝试次数过多，请稍后再试"
+    });
   }
 
   const user = auth.findUser(username);
-  if (!user || !auth.verifyPassword(user, String(body.password || ""))) {
-    loginFailures.set(key, { count: (failure ? failure.count : 0) + 1, lastAttempt: now });
+  let passwordOk = false;
+  try {
+    // 命中泄露口令的账号即使验对也在下面 403 拒绝，这里只管「密码对不对」。
+    passwordOk = user ? await auth.verifyPasswordAsync(user, password) : false;
+    // 无论账号是否存在都消耗一次同量级的 pbkdf2，抹平时间差。
+    if (!user) await auth.hashPasswordAsync(password, TIMING_GUARD_SALT);
+  } catch (error) {
+    // pbkdf2 理论上不会在这条路径抛错；真抛了就按验密失败处理（fail closed），不外泄细节。
+    passwordOk = false;
+  }
+
+  if (!user || !passwordOk) {
+    loginThrottle.recordFailure(ip, username);
     return sendJson(res, 401, { error: "用户名或密码错误" });
   }
 
   // 口令曾随 data/accounts.json 提交进 git 历史（已被还原成明文），验对也不能发会话：先轮换再用。
-  if (!auth.ALLOW_LEAKED_PASSWORDS && auth.isLeakedPassword(user)) {
+  if (!auth.ALLOW_LEAKED_PASSWORDS && (await auth.isLeakedPasswordAsync(user))) {
     auth.revokeSessionsForUsernames([user.username]);
     return sendJson(res, 403, {
       error: "该账号仍在使用已公开的默认密码，已停用。请管理员执行：node scripts/manage-accounts.cjs passwd "
@@ -119,7 +169,7 @@ function handleLogin(req, res, body) {
     });
   }
 
-  loginFailures.delete(key);
+  loginThrottle.recordSuccess(ip, username);
   const token = auth.createSession(user);
   res.writeHead(200, {
     "Content-Type": "application/json; charset=utf-8",
@@ -306,7 +356,7 @@ function handleDeleteUpload(session, id) {
 
 async function handleApi(req, res, pathname, body) {
   if (pathname === "/api/login" && req.method === "POST") {
-    return handleLogin(req, res, body);
+    return await handleLogin(req, res, body);
   }
 
   if (pathname === "/api/logout" && req.method === "POST") {
@@ -413,15 +463,53 @@ function serveStatic(req, res, pathname) {
 const server = http.createServer((req, res) => {
   const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
-  if (pathname.startsWith("/api/")) {
-    readJsonBody(req, pathname === "/api/upload" ? UPLOAD_BODY_LIMIT : MAX_BODY_BYTES)
+  if (!pathname.startsWith("/api/")) {
+    return serveStatic(req, res, pathname);
+  }
+
+  // 上传单独一条路：先过并发闸门兜内存，body 上限按当前规则现算；
+  // 传输层挡下的超大请求回一句和 maxSizeMb 一致的根因，而不是干巴巴的「请求体过大」。
+  if (pathname === "/api/upload" && req.method === "POST") {
+    if (!uploadGate.tryAcquire()) {
+      return sendJson(res, 503, { error: "上传通道繁忙，请稍后重试" });
+    }
+
+    readJsonBody(req, uploadRules.uploadBodyLimitBytes())
       .then(body => handleApi(req, res, pathname, body))
-      .catch(error => sendJson(res, 400, { error: error.message }));
+      .catch(error => respondUploadError(res, req, error))
+      .finally(() => uploadGate.release());
     return;
   }
 
-  return serveStatic(req, res, pathname);
+  readJsonBody(req, MAX_BODY_BYTES)
+    .then(body => handleApi(req, res, pathname, body))
+    .catch(error => sendJson(res, 400, { error: error.message }));
+  return;
 });
+
+// 把「这套部署该注意什么」整理成结构化、可断言的清单，日志和自检都从这里取，避免各说各话。
+// storeInfo 允许注入，好让单元测试不依赖真实环境变量/模块加载态。
+function deploymentWarnings(storeInfo) {
+  const store = storeInfo || auth.sessionStoreInfo();
+  const warnings = [];
+
+  // 进行中的练习（含每题正确答案、判题进度）只在单个进程内存里，从不落盘、也不跨实例共享——
+  // 这是刻意取舍：它生命周期短（重启重开即可），落盘反而把答案写进磁盘扩大泄露面。
+  // 代价就是：多实例轮询会让「在 A 组卷、判题打到 B」直接报「没有进行中的练习」。
+  warnings.push({
+    code: "quiz-single-instance",
+    message: "进行中的练习只存本进程内存、不跨实例共享：多实例负载均衡请开启会话粘滞（同一浏览器固定路由到同一实例），否则答题可能中途丢失。本网页版按单实例设计。"
+  });
+
+  if (store.store === "memory") {
+    warnings.push({
+      code: "memory-session",
+      message: "会话只存进程内存：重启即全员掉线，多实例之间也不共享登录态。生产请设 TUTTI_SESSION_STORE=file 并让各实例共用同一 TUTTI_DATA_DIR。"
+    });
+  }
+
+  return warnings;
+}
 
 // 启动即把「数据放哪、会话怎么存、有没有默认密码」打到日志里，
 // 这三项是网页版部署最容易漏且出事后最难查的地方。
@@ -450,6 +538,15 @@ function logDeploymentDiagnostics() {
       ? `会话存储: 文件（${store.dir}），重启不掉线`
       : "会话存储: 进程内存，重启即全员掉线（TUTTI_SESSION_STORE=file 可改为落盘）"
   );
+
+  const limits = rateLimit.DEFAULTS;
+  if (TRUST_PROXY) {
+    console.warn("登录限流: 采信 x-forwarded-for（TUTTI_TRUST_PROXY 已开）——仅当确信站在会覆盖该头的可信反代后面才可这样，否则客户端能伪造它绕过限流。");
+  } else {
+    console.log(`登录限流: 只认连接来源 IP（忽略 x-forwarded-for）；单账号连续失败 ${limits.userLimit} 次锁 ${Math.round(limits.userWindowMs / 1000)} 秒，单来源累计失败 ${limits.ipLimit} 次触发兜底。`);
+  }
+
+  deploymentWarnings(store).forEach(item => console.warn(`  [部署提示:${item.code}] ${item.message}`));
 
   const defaultPasswordUsers = auth.findUsersWithDefaultPassword();
   if (defaultPasswordUsers.length) {
@@ -481,4 +578,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { startServer };
+module.exports = { startServer, deploymentWarnings };
