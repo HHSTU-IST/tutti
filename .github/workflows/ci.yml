@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: node --test (zero-dependency gate)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # 网页端与小程序都零依赖，不需要 npm install。
+      # 回归门禁：所有 *.test.cjs（含网页端 HTTP 装配层是否可 startServer、
+      # 限流/权限/上传/正则护栏、题库加载、两端引擎防漂移等）。
+      - name: Run test suite
+        run: node --test scripts/
+
+      # 静态一致性与部署清单自检：题库数据、账号/授权来源、集合名与 README 对得上等。
+      - name: Miniprogram release self-check
+        run: node scripts/miniprogram-release-check.cjs

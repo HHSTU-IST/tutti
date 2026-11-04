@@ -64,91 +64,98 @@ tutti 是可扩展的刷题助手，提供网页端和微信小程序。两边�
 
 **微信小程序（作业上传）**：管理员开着作业上传时，课程卡片上会多一个「上传作业」入口。小程序的沙箱读不到手机文件系统，所以文件**只能从聊天记录里选**：先把作业发给「文件传输助手」，进来点「选择文件并上传」选中它即可。规则不符时弹窗会说清原因（哪种格式不允许、文件名该怎么写）；上传成功后下面列出自己的记录，逐条可以删除（删的是云存储里的文件，删掉就得重传）。
 
-### 核心技术实现
+### 管理员
 
-- **题库加载**：`data/topic-*.ts` 按课程存储题库，格式符合 `QuizBank` 接口
-- **答题引擎**：`services/quiz-engine.ts` 提供题目抽取、洗牌、选项随机化等核心功能
-- **页面渲染**：`pages/quiz/` 负责小程序端的题目展示和交互
-- **题型支持**：单选题、判断题、填空题
+1. 用 `admin` 账号登录网页版，**全部题库自动解锁**（普通账号只能进已登记的课程）。
+2. **开通课程**：`node scripts/manage-accounts.cjs courses <账号> py,ml` 调整该账号的已购课程（完整 CLI 见 [docs/development.md](docs/development.md) 的「账号管理」）。
+3. **上传规则**：课程页底部「上传规则设置」面板改允许格式、文件名正则、命名说明、大小上限，保存后对所有学员的后续上传立即生效。格式与命名的校验在服务端，改前端绕不过。注意**这套规则只管网页端**：小程序读不到服务端的规则文件，用的是 `services/upload-rules.ts` 里同值的默认副本，要让小程序也改，得改那份代码再重新发布。
+4. **学员作业**：网页版在课程页「作业上传」面板里看，管理员可删任意一条（`DELETE /api/uploads/<记录 id>`）。**小程序的作业是另一套**：文件在微信云存储、记录在云数据库集合 `homework_uploads`，要在云开发控制台查看与清理；两边的上传互不可见。
+5. 小程序的课程开通走云开发那一套：在云开发控制台的 `user_profiles` 里把该用户文档的 `agents.<课程>` 改成 `true`，学员在首页点「刷新授权」后生效（不必卸载重进；点「退出登录」再重新登录也一样，不需要在网页端操作）。
 
-## 微信登录授权接口
+## 文档与目录
 
-授权入口在 `services/purchase.ts`。后台接口返回格式：
+| 路径                                       | 内容                                                                                                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [docs/development.md](docs/development.md) | 开发文档：项目架构、题库与答题引擎、网页版实现（权限模型 / 会话与运行数据 / 上传规则 / 接口表）、小程序作业上传、已知限制、账号管理、部署清单（网页版 / 小程序）、微信登录授权契约、`user_profiles` 结构、本地调试与测试、试卷生成流水线 |
+| [docs/design.md](docs/design.md)           | 试卷智能体设计与 Word 导出格式要求                                                                                                                                                                                       |
+| `templates/`                               | 试卷模板与配置：`exam-template.md`、`examif.json`、`export.json`、`export-schema.json`、`latex-replace.json`                                                                                                            |
+| `outputs/`                                 | 试卷脚本的生成物（`.md` / `.docx`）                                                                                                                                                                                      |
 
-```json
-{
-  "openId": "用户微信 openid",
-  "agents": {
-    "py": true,
-    "ml": false
-  }
-}
+```text
+├── cloudfunctions/ # 云函数：login（取 openid + 返回课程开通）
+├── data/       # 题库 data/topic-*.js（纯数据）、本地测试开关、网页端账号表
+├── docs/       # development.md、design.md
+├── outputs/    # 试卷脚本的生成物
+├── pages/      # 小程序页面
+├── prompts/    # 课程知识点提示
+├── scripts/    # 构建、账号、自检、组卷脚本
+├── services/   # 核心业务逻辑
+├── templates/  # 试卷模板与配置
+├── types/      # TypeScript 类型定义
+└── web/        # 网页版（Node 服务端 + 静态页面）
 ```
 
-小程序会先调用 `wx.login` 获取 `code`，再向后台发送：
+## 部署与运行
 
-```json
-{
-  "code": "微信登录临时凭证"
-}
+两条发布通道共用 `data/topic-*.js` 这一份题库，可只上一边，也可两边都上。
+
+> **运行环境**：Node ≥ 22.6.0（`web/package.json` 的 `engines` 已声明，用系统里装好的 Node 即可；网页版与小程序零依赖，不需要 `npm install`）。例外是**组卷的 Word 导出**：还要 `pandoc`，以及 `pyproject.toml` 声明的 Python 依赖（`defusedxml`，装在项目 `.venv` 里，`uv sync` 即可；脚本会优先用 `.venv` 的解释器）。小程序端由微信开发者工具编译，不受 Node 版本限制。
+
+| 通道       | 入口       | 登录方式               | 运行形态               |
+| ---------- | ---------- | ---------------------- | ---------------------- |
+| 网页版     | `web/`     | 账号密码（自建账号表） | Node HTTP 服务，单端口 |
+| 微信小程序 | 仓库根目录 | 微信登录 + 后台授权    | 微信开发者工具上传发布 |
+
+### 网页版部署
+
+网页版就是仓库里的一个 Node 服务：**没有构建步骤，也没有需要同步的副本**。题库（`data/topic-*.js`，纯数据）与账号表（`data/accounts.json`）都是运行期直接读的，改完重启服务即生效。
+
+```bash
+# 1) 初始化账号（仅首次；密码随机生成并只打印一次）
+node scripts/manage-accounts.cjs init
+
+# 2) 启动（无第三方依赖，不需要 npm install）
+PORT=3000 HOST=0.0.0.0 node web/server.js
+# 有持久化目录的机器上，让它把会话/规则/作业都落到那里，别留在随代码更新的 web/data：
+# TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
+
+# 3) 启动前先自检一次（账号表、历史泄露口令、会话落盘、运行数据目录）
+node scripts/web-deploy-check.cjs
 ```
 
-`openId` 也可命名为 `wechatOpenId`。`agents` 的 key 是智能体 ID，value 表示是否已购买。生产环境默认值为全 `false`，本地测试环境会读取 `data/access.ts` 作为覆盖。购买后后台返回对应 key 为 `true`。没有登录、没有授权或接口未配置时，用户界面保持空白。
+- **运行形态**：任何能跑 Node 的主机起这一个进程即可，前面挂 Nginx 做 HTTPS 与反向代理。服务默认监听 `PORT` 并绑定 `0.0.0.0`。**本网页版按单实例设计**：登录会话可落盘共享，但「进行中的练习」（组卷答案、判题进度）只在单个进程内存里、不跨实例共享，多实例轮询会让答题中途报「没有进行中的练习」。确实要横向扩容时，请在反向代理上开启会话粘滞（同一浏览器固定打到同一实例）。
+- **`web/` 与 `data/` 要在一起**：服务运行期读的是 `../data/topic-*.js` 与 `../data/accounts.json`，所以部署时带上整个仓库，或至少保持这两个目录的相对位置。
+- **运行期环境变量**：除 `PORT` / `HOST` 外，数据落盘、会话、限流与上传相关的可调项如下。
 
-## 用户数据库
+  | 变量                  | 默认值                      | 作用                                           |
+  | --------------------- | --------------------------- | ---------------------------------------------- |
+  | `TUTTI_DATA_DIR`      | `web/data`                  | 运行数据目录：会话、上传规则、学员作业都落这里 |
+  | `TUTTI_SESSION_STORE` | `file`                      | `file` 落盘（重启不掉线）/ `memory` 纯进程内存 |
+  | `TUTTI_SESSION_DIR`   | `<TUTTI_DATA_DIR>/sessions` | 单独指定会话目录，一般不用改                   |
+  | `TUTTI_TRUST_PROXY`   | 未设置（关）                | 仅在可信反向代理后面设为 `1`，才据 `x-forwarded-for` 取真实来源 IP 做登录限流；直连时保持默认，否则该头可被伪造、限流形同虚设 |
+  | `TUTTI_MAX_CONCURRENT_UPLOADS` | `8`              | 同时处理的上传数上限（base64 整份进内存，用它兜住内存峰值） |
+  | `TUTTI_ALLOW_LEAKED_PASSWORDS` | 未设置               | 仅本地演示：放行命中历史泄露口令的账号（线上别设） |
 
-数据库入口在 `services/user-db.ts`，使用微信云数据库集合 `user_profiles`。每个微信用户一条记录，按 `wechatOpenId` 查询和更新。
+  默认的 `web/data` 就在应用目录里，更新代码时容易被一并覆盖。想长期保留登录态、上传规则与学员作业，就把它指到应用目录之外，之后用 `GET /api/health` 的 `dataDirBoots` / `dataDirFirstBootAt` 复核（重启后 `boots` 继续累加、`firstBootAt` 不变即为正常）：
 
-记录结构：
+  ```bash
+  TUTTI_DATA_DIR=/var/lib/tutti PORT=3000 HOST=0.0.0.0 node web/server.js
+  node scripts/web-deploy-check.cjs
+  ```
 
-```json
-{
-  "wechatOpenId": "用户微信 openid",
-  "agents": {
-    "py": true,
-    "ml": false
-  },
-  "wrongQuestions": [],
-  "stats": {
-    "py": {
-      "rightNum": 0,
-      "wrongNum": 0,
-      "totalNum": 0
-    }
-  },
-  "progress": {
-    "py": {
-      "topicDone": {
-        "var": 0
-      }
-    }
-  },
-  "createdAt": 0,
-  "updatedAt": 0
-}
-```
+- **历史口令已被公开，服务端会阻断**：`data/accounts.json` 曾随提交 `03c6590` 进过仓库（`2535eaf` 删除，但 blob 还在历史里），那两个哈希已还原成 `admin2026` / `demo2026`。现在账号口令只要命中这两个值，登录即使验算通过也返回 403，服务启动时还会吊销它已有的会话。轮换：`node scripts/manage-accounts.cjs passwd <账号> --random`。完整处置（含要不要清 git 历史的取舍）见 [docs/development.md](docs/development.md) 的「历史口令泄露的处置」。
 
-保存内容包括微信 ID、题库购买情况、错题记录、答题统计和答题进度。答题和重置时会自动同步当前刷题助手的数据。
+**部署清单**：启动前逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/web-deploy-check.cjs` 自检，退出码非 0 即还有未通过项）。
 
-新增智能体时，需要同步增加：
+**更新与回滚**：拉代码后重启服务即生效；改上传规则也即时生效（下一个请求就按新规则校验）。改账号尤其简单——课程/角色的调整由服务端每个请求按实时账号表重算，进行中的会话无需重新登录，`passwd` / `remove` 还会顺带吊销该账号的会话。动手前先备份 `data/accounts.json` 与整个 `TUTTI_DATA_DIR`。
 
-- `data/access.json` 中的默认开关
-- 对应题库文件
-- `services/registry.ts` 中的智能体注册表
+### 小程序部署
 
-> 参考示例：数据结构与算法智能体 `al` 与图像处理智能体 `cv` 均已完整接入——题库分别在 `data/topic-al.ts`、`data/topic-cv.ts`，注册见 `services/registry.ts` 的 `AGENT_REGISTRY`，本地测试开关见 `data/access.ts`（开发环境置 `true` 即可扫码进入）。
+1. 用**微信开发者工具**（稳定版）导入仓库根目录；`project.config.json` 里的 `appid` 目前是 `wxf7f1812c7c4f4106`，换成自己的需在微信公众平台注册后修改该字段。
+2. **本地调试**：把 `data/access.ts` 里要测的课程置为 `true`，开发者工具扫码登录即可进入（详见 [docs/development.md](docs/development.md) 的「扫码测试登录」）。
+3. **登录云函数**：仓库已带 `cloudfunctions/login`——它用 `cloud.getWXContext()` 直接取 openid，**不需要自建后台、不需要 AppSecret 与备案域名**。开发者工具里右键 `cloudfunctions/login` →「上传并部署：云端安装依赖」即可；函数名在 `services/runtime-config.ts` 的 `loginFunctionName`（默认 `login`）。没上传或云环境没建好时，首页会直接显示失败原因，不会白屏。
+4. **云数据库**：开发者工具「云开发」新建/选择环境，建集合 `user_profiles`，权限建议「仅创建者可读写」。默认环境即可（多环境时在 `services/runtime-config.ts` 填 `cloudEnv` 指定环境 ID，留空时启动会 `console.warn` 提示）。**开通课程**：在云开发控制台把该学员文档的 `agents.<课程>` 改成 `true`，学员重新登录后生效。云数据库读写失败时答题页会降级为本地使用并弹 toast，不会白屏。
+5. **作业上传（可选）**：生产配置里 `enableHomeworkUpload` 默认开着，课程卡片会出现「上传作业」入口。用它还要在云开发控制台另建集合 `homework_uploads`（权限同样「仅创建者可读写」），云存储权限保持默认的「所有用户可读、仅创建者可写」；没建集合时上传会失败并给出云开发的报错，不影响答题。不想用就把 `enableHomeworkUpload` 改成 `false` 重新发布，入口不再出现。
+6. **发布**：开发者工具右上角「上传」填版本号 → 微信公众平台「版本管理」提交审核 → 审核通过点「发布」。体验版（`envVersion=trial`）与正式版走同一套生产配置，可先拿它做真机验证。
 
-## 扫码测试登录
-
-当前 `services/purchase.ts` 支持本地扫码测试模式：当 `services/runtime-config.ts` 选择开发配置时，小程序仍会调用 `wx.login()`，开发者工具扫码登录后会生成本地测试 openid。
-
-测试授权读取 `data/access.ts`，例如：
-
-```ts
-const access: Record<string, boolean> = {
-  py: true,
-  ml: false
-};
-```
-
-将某个智能体改为 `true` 后，扫码登录即可进入对应题库。接入真实后端时，修改 `services/runtime-config.ts` 里的生产配置，填入真实后台地址和云数据库设置，后端用 `code` 换取真实 openid 并返回 `agents` 授权即可。
+**发布前自检**：逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/miniprogram-release-check.cjs` 自检，退出码非 0 即还有未通过项；`[手工]` 项脚本判不了，需人工确认）。

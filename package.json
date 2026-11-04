@@ -1,0 +1,14 @@
+{
+  "name": "tutti",
+  "version": "1.0.0",
+  "private": true,
+  "description": "刷题助手（tutti）：网页端 + 微信小程序，零依赖题库刷题与作业上传",
+  "scripts": {
+    "test": "node --test scripts/",
+    "check:web": "node scripts/web-deploy-check.cjs",
+    "check:miniprogram": "node scripts/miniprogram-release-check.cjs"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}

@@ -168,6 +168,22 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
     return `${spec.courseCode}-${spec.yearRaw}-${spec.termRaw}-${version}`;
   }
 
+  // 生成物不覆盖此前的版本：先试干净的原名，只要「试卷 .md」或「答案卷 .md」任一已存在，
+  // 就在 baseName 后追加 _1、_2… 直到两者都还没被占用为止——试卷与答案卷共用同一无冲突序号，
+  // 保持配对（否则 ml-2025-2-A.md 与 ml-2025-2-Ak.md 会错开到不同序号）。
+  function resolveOutputPaths(baseName, maxTries = 1000) {
+    const dir = path.join(__dirname, "../outputs");
+    for (let i = 0; i < maxTries; i += 1) {
+      const candidate = i === 0 ? baseName : `${baseName}_${i}`;
+      const outPaper = path.join(dir, `${candidate}.md`);
+      const outAnswer = path.join(dir, `${candidate}k.md`);
+      if (!fs.existsSync(outPaper) && !fs.existsSync(outAnswer)) {
+        return { resolvedBase: candidate, outPaper, outAnswer };
+      }
+    }
+    throw new Error(`outputs 里 ${baseName} 系列的可用序号已用尽`);
+  }
+
   function ensureLatexBlankLines(text) {
     // For every non-empty line that contains a LaTeX formula ($...$ or $$...$$),
     // ensure it is followed by a blank line so the formula is visually separated
@@ -383,6 +399,7 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
   }
 
   function publishGeneratedArtifacts({ manifestEntry, paper, answer }) {
+    fs.mkdirSync(path.dirname(manifestEntry.outPaper), { recursive: true });
     writeFormattedMarkdown(manifestEntry.outPaper, paper);
     writeFormattedMarkdown(manifestEntry.outAnswer, answer);
     console.log(manifestEntry.outPaper);
@@ -395,8 +412,7 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
     const currentSpec = Object.assign({}, spec, { paperVersion: version, versionRaw: version });
     const { paper, answer, counts } = makePaper(currentSpec);
     const baseName = makePaperFileName(currentSpec, version);
-    const outPaper = path.join(__dirname, `../outputs/${baseName}.md`);
-    const outAnswer = path.join(__dirname, `../outputs/${baseName}k.md`);
+    const { outPaper, outAnswer } = resolveOutputPaths(baseName);
 
     return {
       manifestEntry: buildManifestEntry({ spec: currentSpec, version, outPaper, outAnswer, paper, answer, counts }),
@@ -422,6 +438,7 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
     makePaper,
     makePaperFileName,
     publishGeneratedArtifacts,
+    resolveOutputPaths,
     runCli
   };
 }
