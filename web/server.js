@@ -565,7 +565,9 @@ function logDeploymentDiagnostics() {
 
 function startServer(options = {}) {
   return new Promise(resolve => {
-    const listener = server.listen(options.port || PORT, options.host || HOST, () => resolve(listener));
+    // 用 ?? 而非 ||：显式传 0 要表示"让系统分配临时端口"，不能被当成 falsy 落回默认 3000，
+    // 否则并发测试只能"先探一个空闲端口、关掉、再抢占"，端口会在关与抢之间被别人占用（EADDRINUSE）。
+    const listener = server.listen(options.port ?? PORT, options.host ?? HOST, () => resolve(listener));
   });
 }
 

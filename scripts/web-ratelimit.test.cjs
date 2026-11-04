@@ -4,7 +4,6 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
-const net = require("net");
 
 // 单元测试直接驱动限流模块（注入假时钟，不用等真实时间窗），
 // 集成测试再起一个真服务验证「伪造 x-forwarded-for 绕不过限流」。
@@ -135,16 +134,6 @@ const { startServer } = require("../web/server.js");
 let baseUrl = "";
 let server = null;
 
-function getFreePort() {
-  return new Promise(resolve => {
-    const probe = net.createServer();
-    probe.listen(0, "127.0.0.1", () => {
-      const port = probe.address().port;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
 async function login(username, password, headers = {}) {
   const response = await fetch(baseUrl + "/api/login", {
     method: "POST",
@@ -157,8 +146,7 @@ async function login(username, password, headers = {}) {
 }
 
 test.before(async () => {
-  const port = await getFreePort();
-  server = await startServer({ port, host: "127.0.0.1" });
+  server = await startServer({ port: 0, host: "127.0.0.1" });
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 

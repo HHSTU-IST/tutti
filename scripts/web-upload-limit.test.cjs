@@ -4,7 +4,6 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
-const net = require("net");
 
 const uploadRules = require("../web/lib/upload-rules.cjs");
 const { createUploadGate } = require("../web/lib/upload-gate.cjs");
@@ -76,16 +75,6 @@ let baseUrl = "";
 let server = null;
 let cookie = "";
 
-function getFreePort() {
-  return new Promise(resolve => {
-    const probe = net.createServer();
-    probe.listen(0, "127.0.0.1", () => {
-      const port = probe.address().port;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
 async function call(pathname, options = {}) {
   const headers = { "Content-Type": "application/json" };
   if (cookie) headers.Cookie = cookie;
@@ -107,8 +96,7 @@ async function login(username, password) {
 }
 
 test.before(async () => {
-  const port = await getFreePort();
-  server = await startServer({ port, host: "127.0.0.1" });
+  server = await startServer({ port: 0, host: "127.0.0.1" });
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 

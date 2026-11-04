@@ -3,7 +3,6 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const net = require("net");
 
 // 单独成文件（node:test 每文件独立进程）：这样能把 IP 兜底阈值调低而不污染其它限流用例，
 // 也让这里的桶从干净状态开始，判断阈值命中不受顺序影响。
@@ -21,16 +20,6 @@ const { startServer } = require("../web/server.js");
 let baseUrl = "";
 let server = null;
 
-function getFreePort() {
-  return new Promise(resolve => {
-    const probe = net.createServer();
-    probe.listen(0, "127.0.0.1", () => {
-      const port = probe.address().port;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
 async function login(username, password) {
   const response = await fetch(baseUrl + "/api/login", {
     method: "POST",
@@ -43,8 +32,7 @@ async function login(username, password) {
 }
 
 test.before(async () => {
-  const port = await getFreePort();
-  server = await startServer({ port, host: "127.0.0.1" });
+  server = await startServer({ port: 0, host: "127.0.0.1" });
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 

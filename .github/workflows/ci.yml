@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ["22", "24"]
+        # 线上线下统一：CI 跑本地同款 Node 26（网页端/小程序都零依赖，无需 npm install）。
+        node-version: ["26"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

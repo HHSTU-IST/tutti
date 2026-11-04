@@ -4,7 +4,6 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
-const net = require("net");
 
 // 用临时账号表跑测试，不依赖也不修改 data/accounts.json。
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tutti-sec-"));
@@ -75,21 +74,10 @@ async function login(username, password) {
   return call("/api/login", { method: "POST", body: { username, password } });
 }
 
-// server.js 的 startServer 用 `options.port || PORT`，传 0 会被当成 3000，
-// 多个测试文件并行跑时会端口冲突，这里先向内核要一个空闲端口再监听。
-function getFreePort() {
-  return new Promise(resolve => {
-    const probe = net.createServer();
-    probe.listen(0, "127.0.0.1", () => {
-      const port = probe.address().port;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
+// startServer 现在认 0 为"系统分配临时端口"（不再被 || 落回 3000），
+// 因此直接绑临时端口、再从 server.address().port 读回真实端口，多个测试文件并行也不会撞端口。
 test.before(async () => {
-  const port = await getFreePort();
-  server = await startServer({ port, host: "127.0.0.1" });
+  server = await startServer({ port: 0, host: "127.0.0.1" });
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
