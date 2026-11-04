@@ -16,7 +16,10 @@
 !final-*.docx
 
 # 试卷生成物（模板与配置在 templates/，脚本产物在 outputs/）
-outputs/ml-*
+# outputs/ 整个目录都是 generate-exam 的运行产物（A/B 试卷 + Ak/Bk 答案卷），不入库；
+# 只保留 .gitkeep 占位，generate-exam.cjs 会直接往 outputs/ 写文件但不会自建目录。
+outputs/*
+!outputs/.gitkeep
 
 # Node
 *.lock

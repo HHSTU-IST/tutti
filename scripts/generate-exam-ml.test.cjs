@@ -13,10 +13,16 @@ function withMocks(testFn, options = {}) {
     const writes = [];
     const spawns = [];
     const logs = [];
-    const orig = { write: fs.writeFileSync, spawn: childProcess.spawnSync, log: console.log };
+    const mkdirs = [];
+    const orig = { write: fs.writeFileSync, spawn: childProcess.spawnSync, log: console.log, mkdir: fs.mkdirSync, exists: fs.existsSync };
     const docxScript = path.join(__dirname, "generate-exam-docx.py");
 
     fs.writeFileSync = (filePath, content) => writes.push({ filePath, content });
+    // 桩掉建目录：测试用 /tmp 假路径，真跑 mkdirSync 会在本机乱建目录。
+    fs.mkdirSync = (dirPath, options) => { mkdirs.push({ dirPath, options }); return undefined; };
+    // 只把 outputs/ 目录下的存在性判断一律当作「不存在」，让 resolveOutputPaths 在既有用例里
+    // 稳定选到干净原名（不受本机磁盘上是否留有历史试卷影响）；其余 existsSync（如 .venv 解释器探测）走真实现。
+    fs.existsSync = (p) => (typeof p === "string" && p.split(path.sep).join("/").includes("/outputs/") ? false : orig.exists(p));
     childProcess.spawnSync = (command, args, options2) => {
       spawns.push({ command, args, input: options2 && options2.input });
       // docx 导出可以被测试注入失败结果，用来断言报错信息够不够可操作。
@@ -30,9 +36,11 @@ function withMocks(testFn, options = {}) {
     console.log = (value) => logs.push(value);
 
     try {
-      testFn({ t, examModule: require(scriptPath), writes, spawns, logs });
+      testFn({ t, examModule: require(scriptPath), writes, spawns, logs, mkdirs });
     } finally {
       fs.writeFileSync = orig.write;
+      fs.mkdirSync = orig.mkdir;
+      fs.existsSync = orig.exists;
       childProcess.spawnSync = orig.spawn;
       console.log = orig.log;
       delete require.cache[require.resolve(scriptPath)];
@@ -241,3 +249,47 @@ test("runCli can generate a selected version list", withMocks(({ examModule, wri
   assert.equal(writes.length, 2);
   assert.equal(spawns.length, 3);
 }));
+
+test("publishGeneratedArtifacts 先确保输出目录存在（新克隆 outputs/ 被清空也不会 ENOENT）", withMocks(({ examModule, mkdirs }) => {
+  const manifestEntry = { outPaper: "/tmp/ml-2025-2-A.md", outAnswer: "/tmp/ml-2025-2-Ak.md" };
+  examModule.publishGeneratedArtifacts({ manifestEntry, paper: "p", answer: "a" });
+
+  assert.equal(mkdirs.length, 1, "写文件前应建一次输出目录");
+  assert.equal(mkdirs[0].dirPath, "/tmp");
+  assert.deepEqual(mkdirs[0].options, { recursive: true });
+}));
+
+test("resolveOutputPaths 不覆盖此前生成物：原名优先，冲突时试卷与答案卷同步递增", () => {
+  delete require.cache[require.resolve(scriptPath)];
+  const os = require("os");
+  const examModule = require(scriptPath);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tutti-exam-"));
+
+  try {
+    // 目录空：拿到干净原名，试卷/答案卷配对。
+    const fresh = examModule.resolveOutputPaths("ml-2025-2-A", dir);
+    assert.equal(fresh.resolvedBase, "ml-2025-2-A");
+    assert.equal(path.basename(fresh.outPaper), "ml-2025-2-A.md");
+    assert.equal(path.basename(fresh.outAnswer), "ml-2025-2-Ak.md");
+
+    // 已有同名试卷：整体让位到 _1，答案卷也跟着走同一序号（不各自错开）。
+    fs.writeFileSync(fresh.outPaper, "old paper");
+    const afterPaper = examModule.resolveOutputPaths("ml-2025-2-A", dir);
+    assert.equal(afterPaper.resolvedBase, "ml-2025-2-A_1");
+    assert.equal(path.basename(afterPaper.outPaper), "ml-2025-2-A_1.md");
+    assert.equal(path.basename(afterPaper.outAnswer), "ml-2025-2-A_1k.md");
+
+    // 只有答案卷存在时同样应让位（否则会覆盖掉那份答案卷）。
+    fs.writeFileSync(path.join(dir, "cv-2025-2-Ak.md"), "old answer");
+    const afterAnswer = examModule.resolveOutputPaths("cv-2025-2-A", dir);
+    assert.equal(afterAnswer.resolvedBase, "cv-2025-2-A_1");
+
+    // _1 也被占：继续递增到 _2。
+    fs.writeFileSync(path.join(dir, "cv-2025-2-A_1.md"), "taken");
+    const afterBoth = examModule.resolveOutputPaths("cv-2025-2-A", dir);
+    assert.equal(afterBoth.resolvedBase, "cv-2025-2-A_2");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    delete require.cache[require.resolve(scriptPath)];
+  }
+});

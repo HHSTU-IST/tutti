@@ -171,8 +171,7 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
   // 生成物不覆盖此前的版本：先试干净的原名，只要「试卷 .md」或「答案卷 .md」任一已存在，
   // 就在 baseName 后追加 _1、_2… 直到两者都还没被占用为止——试卷与答案卷共用同一无冲突序号，
   // 保持配对（否则 ml-2025-2-A.md 与 ml-2025-2-Ak.md 会错开到不同序号）。
-  function resolveOutputPaths(baseName, maxTries = 1000) {
-    const dir = path.join(__dirname, "../outputs");
+  function resolveOutputPaths(baseName, dir = path.join(__dirname, "../outputs"), maxTries = 1000) {
     for (let i = 0; i < maxTries; i += 1) {
       const candidate = i === 0 ? baseName : `${baseName}_${i}`;
       const outPaper = path.join(dir, `${candidate}.md`);

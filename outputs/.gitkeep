@@ -1,0 +1,2 @@
+# 保留此空目录：组卷脚本 generate-exam.cjs 会把试卷产物写到 outputs/。
+# 具体 .md/.docx 生成物已被 .gitignore 忽略，不入库。
