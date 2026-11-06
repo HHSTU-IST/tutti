@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const net = require("net");
 
 // 用临时账号表跑测试，不依赖也不修改 data/accounts.json。
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tutti-sec-"));
@@ -179,6 +180,26 @@ test("非法 URL 编码的 API 路径返回 4xx 且不崩溃", async () => {
 
   const alive = await call("/");
   assert.equal(alive.status, 200, "非法编码之后服务应仍可正常响应");
+});
+
+test("畸形 Host 头不再打死进程（CRITICAL 远程 DoS 回归）", async () => {
+  // 走 raw socket：fetch 发不出 `Host: a b` 这种非法头，Node HTTP 解析器却会原样放行。
+  // 修复前，这行请求会让 web/server.js 的 new URL(req.url, `http://${host}`) 抛
+  // ERR_INVALID_URL 且未被捕获，直接把服务进程干掉。
+  const { port } = server.address();
+  await new Promise((resolve, reject) => {
+    const sock = net.connect(port, "127.0.0.1", () => {
+      sock.write("GET / HTTP/1.1\r\nHost: a b\r\nConnection: close\r\n\r\n");
+    });
+    sock.on("data", () => {/* 有响应最好，没有也不算失败 */});
+    sock.on("close", resolve);
+    sock.on("error", resolve); // ECONNRESET 也算正常终止
+    setTimeout(() => { try { sock.destroy(); } catch {} resolve(); }, 1500);
+  });
+
+  // 关键断言：进程还活着，后续合法请求能正常拿到 200。
+  const alive = await call("/");
+  assert.equal(alive.status, 200, "非法 Host 之后服务应仍可正常响应（进程没被打死）");
 });
 
 test("登录连续失败 5 次后第 6 次返回 429，锁定期间正确密码也被拒", async () => {

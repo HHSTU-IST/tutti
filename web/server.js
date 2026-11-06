@@ -48,40 +48,64 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
+const BODY_IDLE_TIMEOUT_MS = Number(process.env.TUTTI_BODY_TIMEOUT_MS || 30000);
+
 function readJsonBody(req, limitBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     let raw = "";
     let settled = false;
 
+    // 单一 settle 出口：清 idle 计时、卸 listener、把 raw 释放给 GC。
+    // 修复前只监听 data/end/error，攻击者 POST /api/upload 发个头就静默挂起，
+    // promise 永远 settle 不了，.finally(uploadGate.release) 不跑，闸门槽位被 8 条这种连接占死。
+    const finish = (ok, value) => {
+      if (settled) return;
+      settled = true;
+      if (typeof req.socket?.removeListener === "function") {
+        req.socket.removeListener("timeout", onIdleTimeout);
+        try { req.socket.setTimeout(0); } catch {}
+      }
+      raw = "";
+      if (ok) resolve(value); else reject(value);
+    };
+    const onIdleTimeout = () => {
+      const err = new Error("请求体读取超时");
+      err.code = "REQ_BODY_TIMEOUT";
+      err.status = 408;
+      // 不 destroy：留给上层 .catch 写一个带根因的 408；若客户端已断开，res.end 自然 no-op。
+      finish(false, err);
+    };
+
+    if (typeof req.socket?.setTimeout === "function") {
+      req.socket.setTimeout(BODY_IDLE_TIMEOUT_MS);
+      req.socket.on("timeout", onIdleTimeout);
+    }
+
     req.on("data", chunk => {
-      // 已判定超限或已处理：直接丢弃后续数据，raw 不再增长，内存被卡在 limitBytes 附近。
       if (settled) return;
       raw += chunk;
       if (raw.length > limitBytes) {
-        settled = true;
         const error = new Error("请求体过大");
         error.code = "PAYLOAD_TOO_LARGE";
         // 这里不 destroy：过早拆连接会让客户端只看到 ECONNRESET，收不到带根因的响应。
-        reject(error);
+        finish(false, error);
       }
     });
 
     req.on("end", () => {
       if (settled) return;
-      settled = true;
-      if (!raw) return resolve({});
+      if (!raw) return finish(true, {});
       try {
-        resolve(JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        finish(true, parsed);
       } catch {
-        reject(new Error("请求体不是合法 JSON"));
+        finish(false, new Error("请求体不是合法 JSON"));
       }
     });
 
-    req.on("error", () => {
-      if (settled) return;
-      settled = true;
-      reject(new Error("请求读取中断"));
-    });
+    req.on("aborted", () => finish(false, new Error("请求已被客户端中断")));
+    req.on("close", () => finish(false, new Error("连接已关闭")));
+    req.on("error", () => finish(false, new Error("请求读取中断")));
   });
 }
 
@@ -102,6 +126,9 @@ function respondUploadError(res, req, error) {
     }
     req.resume();
     return undefined;
+  }
+  if (error && error.code === "REQ_BODY_TIMEOUT") {
+    return sendJson(res, 408, { error: error.message });
   }
   return sendJson(res, 400, { error: error.message });
 }
@@ -461,7 +488,15 @@ function serveStatic(req, res, pathname) {
 }
 
 const server = http.createServer((req, res) => {
-  const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  // Host 头是攻击者可控字符串，绝不能再当 URL base：`Host: a b` 这类值能让 new URL 抛
+  // ERR_INVALID_URL，之前挂在 http.createServer 回调最顶端无 try/catch，一个裸 socket 就能打死进程。
+  // 路由只关心 pathname，base 用一个固定哑值即可；再兜一层 try/catch 挡 req.url 本身的病态输入。
+  let pathname;
+  try {
+    pathname = new URL(req.url, "http://tuttii.invalid").pathname;
+  } catch {
+    return sendJson(res, 400, { error: "非法请求路径" });
+  }
 
   if (!pathname.startsWith("/api/")) {
     return serveStatic(req, res, pathname);
@@ -483,7 +518,7 @@ const server = http.createServer((req, res) => {
 
   readJsonBody(req, MAX_BODY_BYTES)
     .then(body => handleApi(req, res, pathname, body))
-    .catch(error => sendJson(res, 400, { error: error.message }));
+    .catch(error => sendJson(res, error.status || 400, { error: error.message }));
   return;
 });
 
