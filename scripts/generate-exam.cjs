@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 // Resolved at call time so callers (and tests) can stub child_process.spawnSync.
 const childProcess = require("child_process");
+const { deriveTopicOrder } = require("../web/lib/catalog.cjs");
 // Template is shared by every course: course-specific values are {{placeholders}}.
 const templatePath = path.join(__dirname, "../templates/exam-template.md");
 const examifPath = path.join(__dirname, "../templates/examif.json");
@@ -53,10 +54,8 @@ const DEFAULT_EXAM_LAYOUT = {
 function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFileName }) {
   const { getQuestions, pickRandomMany, normalizeQuestion, getQuestionText } = engine;
   const config = bank._config || {};
-  // 专题顺序与专题名取自题库 _config，与小程序端、网页端构建脚本同源。
-  const topicOrder = Array.isArray(config.topicOrder) && config.topicOrder.length
-    ? config.topicOrder
-    : Object.keys(bank).filter(key => key !== "_config");
+  // 专题顺序与专题名取自题库 _config，与小程序端、网页端构建脚本同源（deriveTopicOrder 单点定义）。
+  const topicOrder = deriveTopicOrder(bank);
   const topicNames = config.topicNameMap || {};
 
   function fillTemplate(text, values) {

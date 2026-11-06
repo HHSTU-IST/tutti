@@ -22,6 +22,16 @@ function summarize(topics) {
   };
 }
 
+// 从题库 _config.topicOrder 取专题顺序；没声明时退回「bank 上除 _config 外的所有键」。
+// 网页构建（本文件 buildCatalogFromRepo）和 exam 生成（scripts/generate-exam.cjs）共用，
+// 避免两处各写一遍、日后其中一处改了 fallback 规则导致同 bank 两端口径不一致（审计 N13）。
+function deriveTopicOrder(bank) {
+  const config = bank._config || {};
+  return Array.isArray(config.topicOrder) && config.topicOrder.length
+    ? config.topicOrder
+    : Object.keys(bank).filter(key => key !== "_config");
+}
+
 // 直接从仓库的 data/topic-*.js 构建课程清单（构建脚本与开发态回退共用这一份逻辑）。
 // 课程标题、专题顺序与专题名都取自题库 `_config`——与小程序端 services/registry.ts 同源，
 // 不再正则解析 registry.ts（那份元数据已下沉到题库）。
@@ -37,9 +47,7 @@ function buildCatalogFromRepo() {
       const bank = loadTopicBank(id);
       const config = bank._config || {};
       const nameMap = config.topicNameMap || {};
-      const declaredKeys = Array.isArray(config.topicOrder) && config.topicOrder.length
-        ? config.topicOrder
-        : Object.keys(bank).filter(key => key !== "_config");
+      const declaredKeys = deriveTopicOrder(bank);
 
       const topics = [];
       const bankSlice = {};
@@ -69,6 +77,7 @@ function buildCatalogFromRepo() {
 module.exports = {
   REPO_DATA_DIR,
   buildCatalogFromRepo,
+  deriveTopicOrder,
   isTopicBank,
   summarize
 };
