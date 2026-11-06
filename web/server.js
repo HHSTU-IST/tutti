@@ -336,7 +336,7 @@ function handleUpdateUploadRules(session, body) {
   }
 }
 
-function handleUpload(session, body) {
+async function handleUpload(session, body) {
   const courseId = String(body.courseId || "");
   if (!canAccess(session, courseId)) return { status: 403, payload: { error: "该课程尚未开通" } };
 
@@ -355,7 +355,7 @@ function handleUpload(session, body) {
   }
 
   try {
-    const record = uploadRules.saveUpload({
+    const record = await uploadRules.saveUpload({
       courseId,
       username: session.username,
       fileName: String(body.fileName || ""),
@@ -369,9 +369,9 @@ function handleUpload(session, body) {
 }
 
 // 删上传记录：允许删自己的，管理员可删任何一条。越权与不存在的 id 分别返回 403 / 404。
-function handleDeleteUpload(session, id) {
+async function handleDeleteUpload(session, id) {
   try {
-    const upload = uploadRules.deleteUpload({
+    const upload = await uploadRules.deleteUpload({
       id,
       username: session.username,
       isAdmin: session.isAdmin
@@ -427,7 +427,7 @@ async function handleApi(req, res, pathname, body) {
   }
 
   if (pathname === "/api/upload" && req.method === "POST") {
-    const result = handleUpload(session, body);
+    const result = await handleUpload(session, body);
     return sendJson(res, result.status, result.payload);
   }
 
@@ -441,7 +441,7 @@ async function handleApi(req, res, pathname, body) {
   // 所以不做字符白名单，只要求它不是带斜杠的多段路径。
   const uploadMatch = /^\/api\/uploads\/([^/]+)$/.exec(pathname);
   if (uploadMatch && req.method === "DELETE") {
-    const result = handleDeleteUpload(session, decodeURIComponent(uploadMatch[1]));
+    const result = await handleDeleteUpload(session, decodeURIComponent(uploadMatch[1]));
     return sendJson(res, result.status, result.payload);
   }
 

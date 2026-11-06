@@ -226,60 +226,83 @@ function indexLockPath() {
   return `${INDEX_PATH()}.lock`;
 }
 
-// 同步短睡：上传路径本就是同步 fs 操作，争锁极少且窗口极短，阻塞几毫秒不影响吞吐。
-function sleepSync(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+// 异步短睡：以前这里是 Atomics.wait 的同步自旋，单次 25ms、争锁最坏 5s，
+// 会冻结整个事件循环——一个上传排队就让所有并发请求遭殃。改成 setTimeout 后，
+// 等锁期间让出 loop，其他请求照跑（审计 N7）。
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 const LOCK_ACQUIRE_TIMEOUT_MS = Number(process.env.TUTTI_INDEX_LOCK_TIMEOUT_MS) > 0 ? Number(process.env.TUTTI_INDEX_LOCK_TIMEOUT_MS) : 5000;
 const LOCK_RETRY_MS = 25;
 // 持锁进程若中途崩溃没来得及放锁，超过这个时长就判定为陈旧锁并抢占，避免永久卡死。
+// 注意：正常持有者每 LOCK_HEARTBEAT_MS 会 touch 一次锁文件 mtime（见 withIndexLock 心跳），
+// 所以这个阈值只要显著大于心跳周期就够——不再是「写入慢 = 被误抢」的定时器（审计 N5）。
 const LOCK_STALE_MS = 15000;
+// 心跳周期必须远小于 LOCK_STALE_MS，才能确保活着的慢持有者永远不会被判陈旧。
+const LOCK_HEARTBEAT_MS = 4000;
 
-function withIndexLock(mutate) {
+async function withIndexLock(mutate) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   const lockPath = indexLockPath();
   const deadline = Date.now() + LOCK_ACQUIRE_TIMEOUT_MS;
 
   for (; ;) {
-    let fd;
+    let acquired = false;
     try {
-      fd = fs.openSync(lockPath, "wx"); // O_CREAT|O_EXCL：只有第一个进程能建成，天然的互斥
+      const fd = fs.openSync(lockPath, "wx"); // O_CREAT|O_EXCL：只有第一个进程能建成，天然的互斥
       fs.writeSync(fd, String(process.pid));
       fs.closeSync(fd);
-      break;
+      acquired = true;
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-
-      let age = 0;
-      try {
-        age = Date.now() - fs.statSync(lockPath).mtimeMs;
-      } catch {
-        age = 0; // 锁刚被别人放了：下一轮重试即可
-      }
-
-      if (age > LOCK_STALE_MS) {
-        try {
-          fs.rmSync(lockPath, { force: true });
-        } catch {
-          // 抢删失败交给下一轮重试或超时。
-        }
-        continue;
-      }
-
-      if (Date.now() >= deadline) {
-        const timeout = new Error("上传记录正被其它操作占用，请稍后重试");
-        timeout.status = 503;
-        throw timeout;
-      }
-
-      sleepSync(LOCK_RETRY_MS);
     }
+    if (acquired) break;
+
+    let age = 0;
+    try {
+      age = Date.now() - fs.statSync(lockPath).mtimeMs;
+    } catch {
+      // 锁刚被别人放了：下一轮重试即可
+      continue;
+    }
+
+    if (age > LOCK_STALE_MS) {
+      try {
+        fs.rmSync(lockPath, { force: true });
+      } catch {
+        // 抢删失败交给下一轮重试或超时。
+      }
+      continue;
+    }
+
+    if (Date.now() >= deadline) {
+      const timeout = new Error("上传记录正被其它操作占用，请稍后重试");
+      timeout.status = 503;
+      throw timeout;
+    }
+
+    await sleep(LOCK_RETRY_MS);
   }
 
+  // 心跳：只要本进程还活着，就把 mtime 往前推，等待方看到 age≤LOCK_STALE_MS 就不会抢锁。
+  // 崩溃 / SIGKILL 会让 setInterval 停摆，一个 stale 周期后锁自然可被接管，行为等价于 pid-liveness。
+  let heartbeat;
   try {
-    return mutate();
+    heartbeat = setInterval(() => {
+      try {
+        const now = new Date();
+        fs.utimesSync(lockPath, now, now);
+      } catch {
+        // 极端情况：锁被外部手工清理了。心跳失败不影响本进程走完临界区，
+        // 下一波 writer 会 openSync 建新锁——语义等价于「我们的锁已经被抢占，但我们仍然
+        // 会写完这一次数据」，可接受（真正的并发写风险已在 LOCK_STALE_MS 窗口被压缩到
+        // 只剩 crash 后的短暂时间）。
+      }
+    }, LOCK_HEARTBEAT_MS);
+    return await mutate();
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
     try {
       fs.rmSync(lockPath, { force: true });
     } catch {
@@ -288,7 +311,7 @@ function withIndexLock(mutate) {
   }
 }
 
-function saveUpload({ courseId, username, fileName, sizeBytes, content }) {
+async function saveUpload({ courseId, username, fileName, sizeBytes, content }) {
   const rules = readRules();
   const check = checkFile(fileName, sizeBytes, rules);
   if (!check.ok) {
@@ -313,7 +336,7 @@ function saveUpload({ courseId, username, fileName, sizeBytes, content }) {
   };
 
   // 读-改-写整段进锁：否则两条并发上传会各自读到同一份旧索引、后写的覆盖先写的。
-  withIndexLock(() => {
+  await withIndexLock(() => {
     const records = readIndex();
     records.push(record);
     writeIndexAtomic(records);
@@ -333,8 +356,8 @@ function listUploads({ username, isAdmin }) {
  * 只允许本人或管理员操作；索引文件可能是手改过的，所以 storedName 也当不可信输入处理。
  * 读-改-写同样进锁，避免和管理员的新上传互相覆盖。
  */
-function deleteUpload({ id, username, isAdmin }) {
-  return withIndexLock(() => {
+async function deleteUpload({ id, username, isAdmin }) {
+  return await withIndexLock(() => {
     const records = readIndex();
     const index = records.findIndex(record => record.id === id);
     if (index < 0) {

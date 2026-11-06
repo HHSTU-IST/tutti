@@ -39,16 +39,16 @@ test.after(() => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-test("saveUpload 原子落盘：不留下 .tmp / .lock 残留，索引可解析", () => {
+test("saveUpload 原子落盘：不留下 .tmp / .lock 残留，索引可解析", async () => {
   const before = recordCount();
-  seedRecord();
+  await seedRecord();
 
   assert.equal(recordCount(), before + 1, "记录数应正好加一");
   const leftovers = fs.readdirSync(uploadsDir).filter(name => name.endsWith(".tmp") || name.endsWith(".lock"));
   assert.deepEqual(leftovers, [], `目录里不应残留临时/锁文件，实际有 ${leftovers.join(", ")}`);
 });
 
-test("陈旧锁会被接管：即便有进程崩了没放锁，下一次上传仍能写入", () => {
+test("陈旧锁会被接管：即便有进程崩了没放锁，下一次上传仍能写入", async () => {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const lockPath = path.join(uploadsDir, "index.json.lock");
   fs.writeFileSync(lockPath, "deadpid");
@@ -57,7 +57,7 @@ test("陈旧锁会被接管：即便有进程崩了没放锁，下一次上传�
   fs.utimesSync(lockPath, old, old);
 
   const before = recordCount();
-  assert.doesNotThrow(() => seedRecord(), "面对陈旧锁不应卡死或报错");
+  await seedRecord();
   assert.equal(recordCount(), before + 1, "接管后应正常写入一条");
   assert.equal(fs.existsSync(lockPath), false, "写入完成后锁应被释放");
 });
@@ -67,11 +67,13 @@ test("并发上传不丢更新：多进程同时写，最终记录数等于总�
   fs.writeFileSync(
     childScript,
     `const rules = require(process.env.UPLOAD_RULES_MODULE);
-     const n = Number(process.env.CHILD_WRITES || "5");
-     const pid = process.pid;
-     for (let i = 0; i < n; i += 1) {
-       rules.saveUpload({ courseId: "py", username: "stu-" + pid, fileName: "2023010101_A_py.pdf", sizeBytes: 3, content: Buffer.from("payload") });
-     }`
+     (async () => {
+       const n = Number(process.env.CHILD_WRITES || "5");
+       const pid = process.pid;
+       for (let i = 0; i < n; i += 1) {
+         await rules.saveUpload({ courseId: "py", username: "stu-" + pid, fileName: "2023010101_A_py.pdf", sizeBytes: 3, content: Buffer.from("payload") });
+       }
+     })().catch(err => { console.error(err); process.exit(1); });`
   );
 
   const CHILDREN = 3;
@@ -100,7 +102,7 @@ test("并发上传不丢更新：多进程同时写，最终记录数等于总�
 
   // 父进程同时也在写，和子进程抢同一把锁，制造真实的读-改-写竞争。
   const parentWrites = (async () => {
-    for (let i = 0; i < PARENT_WRITES; i += 1) seedRecord();
+    for (let i = 0; i < PARENT_WRITES; i += 1) await seedRecord();
   })();
 
   await Promise.all([Promise.all(children), parentWrites]);

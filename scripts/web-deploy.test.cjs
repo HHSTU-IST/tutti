@@ -116,7 +116,7 @@ test("非法会话 id（路径穿越写法）直接视为未登录", () => {
   });
 });
 
-test("上传规则与作业文件落在 TUTTI_DATA_DIR 下", () => {
+test("上传规则与作业文件落在 TUTTI_DATA_DIR 下", async () => {
   const dataDir = path.join(rootDir, "case-uploads");
   const { uploadRules } = loadFresh(dataDir, "file");
 
@@ -132,7 +132,7 @@ test("上传规则与作业文件落在 TUTTI_DATA_DIR 下", () => {
   assert.deepEqual(saved.allowedExtensions, [".pdf"]);
   assert.ok(fs.existsSync(path.join(dataDir, "upload-rules.json")), "规则应写进数据目录");
 
-  const record = uploadRules.saveUpload({
+  const record = await uploadRules.saveUpload({
     courseId: "py",
     username: "student",
     fileName: "hw-01.pdf",
