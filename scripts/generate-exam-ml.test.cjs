@@ -14,7 +14,7 @@ function withMocks(testFn, options = {}) {
     const spawns = [];
     const logs = [];
     const mkdirs = [];
-    const orig = { write: fs.writeFileSync, spawn: childProcess.spawnSync, log: console.log, mkdir: fs.mkdirSync, exists: fs.existsSync };
+    const orig = { write: fs.writeFileSync, spawn: childProcess.spawnSync, log: console.log, mkdir: fs.mkdirSync, exists: fs.existsSync, lstat: fs.lstatSync };
     const docxScript = path.join(__dirname, "generate-exam-docx.py");
 
     fs.writeFileSync = (filePath, content) => writes.push({ filePath, content });
@@ -23,6 +23,16 @@ function withMocks(testFn, options = {}) {
     // 只把 outputs/ 目录下的存在性判断一律当作「不存在」，让 resolveOutputPaths 在既有用例里
     // 稳定选到干净原名（不受本机磁盘上是否留有历史试卷影响）；其余 existsSync（如 .venv 解释器探测）走真实现。
     fs.existsSync = (p) => (typeof p === "string" && p.split(path.sep).join("/").includes("/outputs/") ? false : orig.exists(p));
+    // N14 后 resolveOutputPaths 走 lstatSync + isPathVacant：outputs 路径要模拟 ENOENT 才算「空位」，
+    // 真跑的话本机上历史 ml-*/*.md 会让候选序号一路递增，测试里断的就是 baseName 原名——所以必须桩。
+    fs.lstatSync = (p) => {
+      if (typeof p === "string" && p.split(path.sep).join("/").includes("/outputs/")) {
+        const error = new Error(`ENOENT: no such file or directory, lstat '${p}'`);
+        error.code = "ENOENT";
+        throw error;
+      }
+      return orig.lstat(p);
+    };
     childProcess.spawnSync = (command, args, options2) => {
       spawns.push({ command, args, input: options2 && options2.input });
       // docx 导出可以被测试注入失败结果，用来断言报错信息够不够可操作。
@@ -41,6 +51,7 @@ function withMocks(testFn, options = {}) {
       fs.writeFileSync = orig.write;
       fs.mkdirSync = orig.mkdir;
       fs.existsSync = orig.exists;
+      fs.lstatSync = orig.lstat;
       childProcess.spawnSync = orig.spawn;
       console.log = orig.log;
       delete require.cache[require.resolve(scriptPath)];

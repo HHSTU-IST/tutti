@@ -130,8 +130,18 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
 
     if (!record) {
       const matchedEntry = entries.find(([, value]) => value && value.courseCode === courseCode);
-      record = matchedEntry ? matchedEntry[1] : entries[0][1];
-      key = matchedEntry ? matchedEntry[0] : entries[0][0];
+      if (!matchedEntry) {
+        // 以前这里会退回 entries[0][1]——一旦 examif.json 里漏了本课程的记录，就会拿别的
+        // 课程（courseName/yearRaw/termRaw/school 全都不是本课的）去出卷，产物看上去文件名对、
+        // 内容全错，还是 exit 0。审计 N20 的"静默走偏"典型；改成显式抛错并列出手上现有哪些键。
+        const availableKeys = entries.map(([k]) => k).join("、");
+        throw new Error(
+          `templates/examif.json 里没找到课程代码为 "${courseCode}" 的记录（现有键：${availableKeys}）。`
+          + ` 请补一条 courseCode=${courseCode} 的记录再重跑，或直接指定要用的 examif 键名。`
+        );
+      }
+      record = matchedEntry[1];
+      key = matchedEntry[0];
     }
 
     const actualCourseCode = String(record.courseCode || "").toLowerCase();
@@ -167,6 +177,20 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
     return `${spec.courseCode}-${spec.yearRaw}-${spec.termRaw}-${version}`;
   }
 
+  // lstatSync-based vacancy check：fs.existsSync 会把 ENOENT 之外的错误（EACCES/ELOOP/坏 symlink）
+  // 也吞成 false——审计 N14：权限一坏，resolveOutputPaths 就误报「这个序号还空着」，
+  // 下一步 writeFormattedMarkdown 直接把上一版试卷盖掉，「不覆盖旧版」这条承诺就漏了。
+  // 只有 ENOENT 才算真空位；其他错误说明磁盘状态读不懂，硬失败让运维去修权限。
+  function isPathVacant(target) {
+    try {
+      fs.lstatSync(target);
+      return false;
+    } catch (error) {
+      if (error && error.code === "ENOENT") return true;
+      throw error;
+    }
+  }
+
   // 生成物不覆盖此前的版本：先试干净的原名，只要「试卷 .md」或「答案卷 .md」任一已存在，
   // 就在 baseName 后追加 _1、_2… 直到两者都还没被占用为止——试卷与答案卷共用同一无冲突序号，
   // 保持配对（否则 ml-2025-2-A.md 与 ml-2025-2-Ak.md 会错开到不同序号）。
@@ -175,7 +199,7 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
       const candidate = i === 0 ? baseName : `${baseName}_${i}`;
       const outPaper = path.join(dir, `${candidate}.md`);
       const outAnswer = path.join(dir, `${candidate}k.md`);
-      if (!fs.existsSync(outPaper) && !fs.existsSync(outAnswer)) {
+      if (isPathVacant(outPaper) && isPathVacant(outAnswer)) {
         return { resolvedBase: candidate, outPaper, outAnswer };
       }
     }
