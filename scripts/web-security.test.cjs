@@ -290,8 +290,17 @@ test("fill 分支两端引擎 correctAnswer 与 options 一致", () => {
       (entry.bank[topicKey].fill || []).slice(0, 3).forEach(question => {
         const web = webEngine.normalizeQuestion(question, "fill", "专题", topicKey);
         const mini = miniEngine.normalizeQuestion(question, "fill", "专题", topicKey);
+        assert.equal(typeof web.correctAnswer, "string", `${entry.id}/${topicKey} fill correctAnswer 必须是字符串`);
+        assert.ok(web.correctAnswer.length > 0, `${entry.id}/${topicKey} fill correctAnswer 不能为空`);
         assert.equal(web.correctAnswer, mini.correctAnswer, `${entry.id}/${topicKey} fill 答案不一致`);
         assert.deepEqual(web.options, mini.options, `${entry.id}/${topicKey} fill options 不一致`);
+        // getQuestionText 里那条 "____" → "______" 的加宽规则也得两端同步，
+        // 否则小程序上看到的空格长度和网页/试卷不一致，学员按网页背答案会误判。
+        assert.equal(
+          webEngine.getQuestionText(question, "fill"),
+          miniEngine.getQuestionText(question, "fill"),
+          `${entry.id}/${topicKey} fill getQuestionText 不一致（"____" 加宽规则漂移？）`
+        );
         compared += 1;
       });
     });

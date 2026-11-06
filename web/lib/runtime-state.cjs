@@ -30,7 +30,10 @@ function markBoot(now = Date.now()) {
 
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    // tmp + rename：与 writeIndexAtomic 一个套路，避免中途崩溃留下半截 JSON 让 boots 计数被误清 0。
+    const tmpPath = `${STATE_PATH}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+    fs.writeFileSync(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    fs.renameSync(tmpPath, STATE_PATH);
   } catch (error) {
     return Object.assign(state, { writable: false, error: error.message });
   }
