@@ -5,10 +5,15 @@ const crypto = require("crypto");
 const { catalog } = require("./banks.cjs");
 const { DATA_DIR } = require("./data-dir.cjs");
 
+const { createMtimeJsonCache } = require("./mtime-json-cache.cjs");
+
 // 账号表只有一份真源：仓库根目录 data/accounts.json（scripts/manage-accounts.cjs 也改这一处）。
 // 测试用 TUTTI_ACCOUNTS_PATH 指向临时文件，不读写真实账号表。
 const REPO_ACCOUNTS = path.join(__dirname, "../../data/accounts.json");
 const ACCOUNTS_PATH = process.env.TUTTI_ACCOUNTS_PATH || REPO_ACCOUNTS;
+const accountsCache = createMtimeJsonCache(() => ACCOUNTS_PATH, {
+  fallbackWhenMissing: { version: 1, users: [] }
+});
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PBKDF2_ITERATIONS = 120000;
 const SESSION_COOKIE = "sid";
@@ -73,15 +78,14 @@ function hashPasswordAsync(password, salt) {
 }
 
 function readAccounts() {
-  if (!fs.existsSync(ACCOUNTS_PATH)) {
-    return { version: 1, users: [] };
-  }
-
-  return JSON.parse(fs.readFileSync(ACCOUNTS_PATH, "utf8"));
+  return accountsCache.read();
 }
 
 function writeAccounts(data) {
   fs.writeFileSync(ACCOUNTS_PATH, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+  // 显式失效：mtimeMs 精度不够（某些容器 FS 上同秒覆写 + 相同字节数会漏检），
+  // 靠 statSync 判定不保险；写完立刻丢缓存，下一次 read 必然走 parse 拿新内容。
+  accountsCache.invalidate();
 }
 
 function findUser(username) {

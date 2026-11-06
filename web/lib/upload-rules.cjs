@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { DATA_DIR } = require("./data-dir.cjs");
+const { createMtimeJsonCache } = require("./mtime-json-cache.cjs");
 
 // 规则文件与作业文件都落在运行数据目录里：部署时把 TUTTI_DATA_DIR 指到持久卷，
 // 管理员设的上传规则和学员作业就不会随重新发布一起丢。
@@ -18,6 +19,19 @@ const DEFAULT_RULES = {
 };
 
 const MAX_SIZE_LIMIT_MB = 200;
+
+// readRules 稳态命中缓存：只 statSync 一次，文件 mtime+size 没变就直接给上次的解析结果，
+// 免得每个上传/设置读请求都 readFileSync + JSON.parse + normalizeRules。损坏文件、危险模式
+// 被 normalizeRules 抛出的情况也照旧走 DEFAULT_RULES 兜底，同时缓存这份兜底，避免 loop 反复
+// 解析同一份坏文件。writeRules 会显式 invalidate，同秒覆写也不吃 mtime 精度。
+const rulesCache = createMtimeJsonCache(() => RULES_PATH, {
+  // 缺文件时不返回 null，让 readRules 拿到 DEFAULT_RULES 拷贝、跟旧行为一致。
+  fallbackWhenMissing: undefined,
+  // 缓存 normalizeRules 的产出：热路径就一次 statSync、不再 parse 也不再跑 ReDoS 检测。
+  transform: (parsed) => normalizeRules(parsed),
+  // 文件损坏或含危险正则：与旧代码一样，返回 DEFAULT_RULES 的浅拷贝（避免调用方改了污染缓存）。
+  fallbackOnError: () => Object.assign({}, DEFAULT_RULES)
+});
 
 // base64 每 3 字节膨胀成 4 字符，再留出 JSON 包裹与文件名的余量。
 // 上限按「当前规则里的 maxSizeMb」推导，保证一个刚好合规的文件必定能通过传输层、
@@ -38,14 +52,10 @@ function describeUploadOversize(rules) {
 }
 
 function readRules() {
-  if (!fs.existsSync(RULES_PATH)) return Object.assign({}, DEFAULT_RULES);
-
-  try {
-    return normalizeRules(JSON.parse(fs.readFileSync(RULES_PATH, "utf8")));
-  } catch {
-    // 规则文件损坏时退回默认值，避免整个上传功能不可用。
-    return Object.assign({}, DEFAULT_RULES);
-  }
+  // 缓存里存的要么是 normalizeRules 的产出，要么是 DEFAULT_RULES 拷贝（缺文件/坏文件/危险模式）。
+  // 与旧 try/catch 语义等价，但热路径只 statSync 一次。
+  const cached = rulesCache.read();
+  return cached === undefined ? Object.assign({}, DEFAULT_RULES) : cached;
 }
 
 // 文件名长度上限：ReDoS 的燃料是「足够长的输入」，先给文件名封顶，既挡掉明显的超长投毒，
@@ -159,6 +169,7 @@ function writeRules(input) {
   const rules = normalizeRules(input);
   fs.mkdirSync(path.dirname(RULES_PATH), { recursive: true });
   fs.writeFileSync(RULES_PATH, `${JSON.stringify(rules, null, 2)}\n`);
+  rulesCache.invalidate();
   return rules;
 }
 
