@@ -4,6 +4,7 @@
 const auth = require("../web/lib/auth.cjs");
 const uploadRules = require("../web/lib/upload-rules.cjs");
 const { DATA_DIR, ensureWritable, isInsideAppDir } = require("../web/lib/data-dir.cjs");
+const { deploymentWarnings } = require("../web/lib/deployment-warnings.cjs");
 const { createReporter } = require("./check-report.cjs");
 
 const reporter = createReporter();
@@ -53,12 +54,10 @@ function checkSessionStore() {
       : "当前为进程内存：重启即全员掉线\n未设置时默认就是 file，请检查是否显式设成了 TUTTI_SESSION_STORE=memory"
   );
 
-  // 会话能共享，不代表练习也能共享：这是单实例设计里最容易被多实例部署踩到的坑，如实提示。
-  reporter.hint(
-    "进行中的练习不跨实例",
-    "组卷答案与判题进度只在单进程内存里、不落盘也不跨实例共享：多实例做负载均衡时须开启会话粘滞"
-      + "（同一浏览器固定打到同一实例），否则答题可能中途报「当前没有进行中的练习」。本网页版按单实例设计。"
-  );
+  // 会话能共享，不代表练习也能共享：这是单实例设计里最容易被多实例部署踩到的坑，
+  // 直接取 deploymentWarnings 的 quiz-single-instance 文案，与启动日志一处说话（审计 N12）。
+  const quizHint = deploymentWarnings(store).find(item => item.code === "quiz-single-instance");
+  reporter.hint("进行中的练习不跨实例", quizHint.message);
 }
 
 function checkDataDir() {

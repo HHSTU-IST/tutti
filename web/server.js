@@ -9,6 +9,7 @@ const rateLimit = require("./lib/rate-limit.cjs");
 const { createUploadGate } = require("./lib/upload-gate.cjs");
 const { ensureWritable, isInsideAppDir } = require("./lib/data-dir.cjs");
 const { checkNodeVersion } = require("./lib/node-version.cjs");
+const { deploymentWarnings } = require("./lib/deployment-warnings.cjs");
 const { markBoot, readState } = require("./lib/runtime-state.cjs");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -522,29 +523,8 @@ const server = http.createServer((req, res) => {
   return;
 });
 
-// 把「这套部署该注意什么」整理成结构化、可断言的清单，日志和自检都从这里取，避免各说各话。
-// storeInfo 允许注入，好让单元测试不依赖真实环境变量/模块加载态。
-function deploymentWarnings(storeInfo) {
-  const store = storeInfo || auth.sessionStoreInfo();
-  const warnings = [];
-
-  // 进行中的练习（含每题正确答案、判题进度）只在单个进程内存里，从不落盘、也不跨实例共享——
-  // 这是刻意取舍：它生命周期短（重启重开即可），落盘反而把答案写进磁盘扩大泄露面。
-  // 代价就是：多实例轮询会让「在 A 组卷、判题打到 B」直接报「没有进行中的练习」。
-  warnings.push({
-    code: "quiz-single-instance",
-    message: "进行中的练习只存本进程内存、不跨实例共享：多实例负载均衡请开启会话粘滞（同一浏览器固定路由到同一实例），否则答题可能中途丢失。本网页版按单实例设计。"
-  });
-
-  if (store.store === "memory") {
-    warnings.push({
-      code: "memory-session",
-      message: "会话只存进程内存：重启即全员掉线，多实例之间也不共享登录态。生产请设 TUTTI_SESSION_STORE=file 并让各实例共用同一 TUTTI_DATA_DIR。"
-    });
-  }
-
-  return warnings;
-}
+// 把「这套部署该注意什么」整理成结构化、可断言的清单——具体文案见 web/lib/deployment-warnings.cjs，
+// 与 scripts/web-deploy-check.cjs 共用同一份，避免审计 N12 里两处措辞漂移的问题重演。
 
 // 启动即把「数据放哪、会话怎么存、有没有默认密码」打到日志里，
 // 这三项是网页版部署最容易漏且出事后最难查的地方。
