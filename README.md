@@ -136,6 +136,8 @@ node scripts/web-deploy-check.cjs
   | `TUTTI_MAX_CONCURRENT_UPLOADS` | `8`              | 同时处理的上传数上限（base64 整份进内存，用它兜住内存峰值） |
   | `TUTTI_ALLOW_LEAKED_PASSWORDS` | 未设置               | 仅本地演示：放行命中历史泄露口令的账号（线上别设） |
 
+  **上传并发与内存预算**：网页端目前把整份 base64 请求体留在内存里解码，一条上传在峰值会占约 `文件字节数 × 3.5`（base64 编码 4/3× + JSON 字符串化 1× + Buffer 拷贝 1×）。总内存上限按 `maxSizeMb × 3.5 × TUTTI_MAX_CONCURRENT_UPLOADS` 估算，再把结果对齐实例 RSS 的 50%——例如 `maxSizeMb=200` + `gate=8` 就是 `200 × 3.5 × 8 ≈ 5.6 GB`，1GB 实例必须把两个数都调小。改上传规则里的 `maxSizeMb` 或环境变量 `TUTTI_MAX_CONCURRENT_UPLOADS` 都会立即生效；两者一起调到实例撑得住的量级即可，公式在 `web/server.js` 的 `MAX_BODY_BYTES` 与 `web/lib/upload-gate.cjs` 的 `DEFAULT_MAX_CONCURRENT_UPLOADS` 之间保持一致。
+
   默认的 `web/data` 就在应用目录里，更新代码时容易被一并覆盖。想长期保留登录态、上传规则与学员作业，就把它指到应用目录之外，之后用 `GET /api/health` 的 `dataDirBoots` / `dataDirFirstBootAt` 复核（重启后 `boots` 继续累加、`firstBootAt` 不变即为正常）：
 
   ```bash
