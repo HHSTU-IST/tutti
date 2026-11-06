@@ -121,6 +121,7 @@ PORT=3000 HOST=0.0.0.0 node web/server.js
 
 # 3) 启动前先自检一次（账号表、历史泄露口令、会话落盘、运行数据目录）
 node scripts/web-deploy-check.cjs
+# 等价于：npm run check:web
 ```
 
 - **运行形态**：任何能跑 Node 的主机起这一个进程即可，前面挂 Nginx 做 HTTPS 与反向代理。服务默认监听 `PORT` 并绑定 `0.0.0.0`。**本网页版按单实例设计**：登录会话可落盘共享，但「进行中的练习」（组卷答案、判题进度）只在单个进程内存里、不跨实例共享，多实例轮询会让答题中途报「没有进行中的练习」。确实要横向扩容时，请在反向代理上开启会话粘滞（同一浏览器固定打到同一实例）。
@@ -160,4 +161,4 @@ node scripts/web-deploy-check.cjs
 5. **作业上传（可选）**：生产配置里 `enableHomeworkUpload` 默认开着，课程卡片会出现「上传作业」入口。用它还要在云开发控制台另建集合 `homework_uploads`（权限同样「仅创建者可读写」），云存储权限保持默认的「所有用户可读、仅创建者可写」；没建集合时上传会失败并给出云开发的报错，不影响答题。不想用就把 `enableHomeworkUpload` 改成 `false` 重新发布，入口不再出现。
 6. **发布**：开发者工具右上角「上传」填版本号 → 微信公众平台「版本管理」提交审核 → 审核通过点「发布」。体验版（`envVersion=trial`）与正式版走同一套生产配置，可先拿它做真机验证。
 
-**发布前自检**：逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/miniprogram-release-check.cjs` 自检，退出码非 0 即还有未通过项；`[手工]` 项脚本判不了，需人工确认）。
+**发布前自检**：逐项过一遍 → [docs/development.md 的「部署清单」](docs/development.md#部署清单)（`node scripts/miniprogram-release-check.cjs` 或 `npm run check:miniprogram` 自检，退出码非 0 即还有未通过项；`[手工]` 项脚本判不了，需人工确认）。

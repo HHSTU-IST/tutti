@@ -35,7 +35,17 @@ export function pickRandom<T>(list: T[]): T {
 
 export function pickRandomMany<T>(list: T[], count: number): T[] {
   if (count <= 0) return [];
-  return shuffle(list).slice(0, Math.min(count, list.length));
+  // 与 web/lib/engine.cjs::pickRandomMany 严格同步：部分 Fisher-Yates，只交换前 k 位。
+  // 全 shuffle 再 slice 与它分布相同，但成本 O(n) vs O(k)，小程序题库越大越吃亏。
+  const k = Math.min(count, list.length);
+  const pool = list.slice();
+  for (let i = 0; i < k; i += 1) {
+    const j = i + Math.floor(Math.random() * (pool.length - i));
+    const tmp = pool[i];
+    pool[i] = pool[j];
+    pool[j] = tmp;
+  }
+  return pool.slice(0, k);
 }
 
 export function formatExplain(question: RawQuestion): string {

@@ -25,7 +25,18 @@ function pickRandom(list) {
 
 function pickRandomMany(list, count) {
   if (count <= 0) return [];
-  return shuffle(list).slice(0, Math.min(count, list.length));
+  // 部分 Fisher-Yates：只做前 k 次交换，第 i 步从 i..n-1 里等概率挑一个换到位置 i。
+  // 分布与「全 shuffle 再 slice(0,k)」一样是无放回均匀抽样，但成本从 O(n) 降到 O(k)。
+  // 大题库挑小题时省得最多（60~80 题池挑 10 题，全 shuffle 白干 50~70 次交换）；小池也没退化。
+  const k = Math.min(count, list.length);
+  const pool = list.slice();
+  for (let i = 0; i < k; i += 1) {
+    const j = i + Math.floor(Math.random() * (pool.length - i));
+    const tmp = pool[i];
+    pool[i] = pool[j];
+    pool[j] = tmp;
+  }
+  return pool.slice(0, k);
 }
 
 function normalizeQuestion(question, type, topicName, fallbackTopic = "") {
