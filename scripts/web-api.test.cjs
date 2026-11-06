@@ -3,22 +3,18 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const crypto = require("crypto");
+const { makeUser } = require("./test-util.cjs");
 
 // 用临时账号表跑测试，不依赖也不修改 data/accounts.json。
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tutti-web-"));
 const accountsPath = path.join(tempDir, "accounts.json");
-
-function makeUser(username, password, role, courses) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  return {
-    username,
-    role,
-    courses,
-    salt,
-    hash: crypto.pbkdf2Sync(password, salt, 120000, 32, "sha256").toString("hex")
-  };
-}
+// 注意：env 必须先于 makeUser 落位——test-util 会 lazily require auth.cjs，
+// 而 auth.cjs 在加载时就把 ACCOUNTS_PATH/DATA_DIR 等固化成 const，晚设 env 无效。
+process.env.TUTTI_ACCOUNTS_PATH = accountsPath;
+// 会话、上传规则、作业文件都固定在临时目录：测试不写仓库数据，多个测试文件并行也不会互踩。
+process.env.TUTTI_DATA_DIR = tempDir;
+process.env.TUTTI_RULES_PATH = path.join(tempDir, "upload-rules.json");
+process.env.TUTTI_UPLOADS_DIR = path.join(tempDir, "uploads");
 
 fs.writeFileSync(
   accountsPath,
@@ -27,11 +23,6 @@ fs.writeFileSync(
     users: [makeUser("admin", "admin-pwd", "admin", []), makeUser("student", "student-pwd", "user", ["py"])]
   })
 );
-process.env.TUTTI_ACCOUNTS_PATH = accountsPath;
-// 会话、上传规则、作业文件都固定在临时目录：测试不写仓库数据，多个测试文件并行也不会互踩。
-process.env.TUTTI_DATA_DIR = tempDir;
-process.env.TUTTI_RULES_PATH = path.join(tempDir, "upload-rules.json");
-process.env.TUTTI_UPLOADS_DIR = path.join(tempDir, "uploads");
 
 const { startServer } = require("../web/server.js");
 

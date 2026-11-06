@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const crypto = require("crypto");
+const { makeUser } = require("./test-util.cjs");
 
 // 单元测试直接驱动限流模块（注入假时钟，不用等真实时间窗），
 // 集成测试再起一个真服务验证「伪造 x-forwarded-for 绕不过限流」。
@@ -112,11 +112,10 @@ test("trustProxyEnabled 只在显式打开时为真", () => {
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tutti-rl-"));
 const accountsPath = path.join(tempDir, "accounts.json");
-
-function makeUser(username, password, role, courses) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  return { username, role, courses, salt, hash: crypto.pbkdf2Sync(password, salt, 120000, 32, "sha256").toString("hex") };
-}
+// env 必须先落位——makeUser 里的 lazily require auth.cjs 会把 ACCOUNTS_PATH 固化成 const。
+process.env.TUTTI_ACCOUNTS_PATH = accountsPath;
+process.env.TUTTI_DATA_DIR = tempDir;
+process.env.TUTTI_COOKIE_SECURE = "0";
 
 fs.writeFileSync(
   accountsPath,
@@ -125,9 +124,6 @@ fs.writeFileSync(
     users: [makeUser("victim", "right-pwd", "user", ["py"]), makeUser("spoof", "right-pwd", "user", ["py"])]
   })
 );
-process.env.TUTTI_ACCOUNTS_PATH = accountsPath;
-process.env.TUTTI_DATA_DIR = tempDir;
-process.env.TUTTI_COOKIE_SECURE = "0";
 
 const { startServer } = require("../web/server.js");
 

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const crypto = require("crypto");
+const { makeUser } = require("./test-util.cjs");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tutti-rx-"));
 const accountsPath = path.join(tempDir, "accounts.json");
@@ -65,10 +65,6 @@ test("checkFile 先给文件名长度封顶，再跑正则", () => {
 
 // ---- 集成：管理员存危险正则被 400，安全正则放行 ----
 
-function makeUser(username, password, role, courses) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  return { username, role, courses, salt, hash: crypto.pbkdf2Sync(password, salt, 120000, 32, "sha256").toString("hex") };
-}
 fs.writeFileSync(accountsPath, JSON.stringify({ version: 1, users: [makeUser("admin", "admin-pwd", "admin", [])] }));
 
 const { startServer } = require("../web/server.js");

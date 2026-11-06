@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const crypto = require("crypto");
+const { makeUser } = require("./test-util.cjs");
 
 const uploadRules = require("../web/lib/upload-rules.cjs");
 const { createUploadGate } = require("../web/lib/upload-gate.cjs");
@@ -56,18 +56,14 @@ test("body 上限随 maxSizeMb 单调变大，且根因文案带上限数字", (
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tutti-ull-"));
 const accountsPath = path.join(tempDir, "accounts.json");
-
-function makeUser(username, password, role, courses) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  return { username, role, courses, salt, hash: crypto.pbkdf2Sync(password, salt, 120000, 32, "sha256").toString("hex") };
-}
-
-fs.writeFileSync(accountsPath, JSON.stringify({ version: 1, users: [makeUser("admin", "admin-pwd", "admin", [])] }));
+// env 必须先落位——makeUser 里的 lazily require auth.cjs 会把 ACCOUNTS_PATH 固化成 const。
 process.env.TUTTI_ACCOUNTS_PATH = accountsPath;
 process.env.TUTTI_DATA_DIR = tempDir;
 process.env.TUTTI_RULES_PATH = path.join(tempDir, "upload-rules.json");
 process.env.TUTTI_UPLOADS_DIR = path.join(tempDir, "uploads");
 process.env.TUTTI_COOKIE_SECURE = "0";
+
+fs.writeFileSync(accountsPath, JSON.stringify({ version: 1, users: [makeUser("admin", "admin-pwd", "admin", [])] }));
 
 const { startServer } = require("../web/server.js");
 
