@@ -9,12 +9,12 @@
         "targetMajor": "2024级计算机科学与技术"
     },
     "computer-vision": {
-        "yearRaw": 2025,
-        "termRaw": 2,
+        "yearRaw": 2027,
+        "termRaw": 1,
         "versionRaw": "A",
         "courseCode": "cv",
         "courseName": "图像处理与识别",
-        "paperCode": "010822406",
+        "paperCode": "010822409",
         "targetMajor": "2024级智能科学与技术"
     }
 }
