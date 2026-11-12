@@ -18,23 +18,23 @@
 
 5、请自觉遵守考场纪律。
 
-## 一、单项选择题（每小题1分，共10分）
+## 一、单项选择题（每小题{{singleScore}}分，共{{singleTotal}}分）
 
 {{singleQuestions}}
 
-## 二、判断题（每小题1分，共10分）
+## 二、判断题（每小题{{judgeScore}}分，共{{judgeTotal}}分）
 
 {{judgeQuestions}}
 
-## 三、填空题（每小题2分，共20分）
+## 三、填空题（每小题{{fillScore}}分，共{{fillTotal}}分）
 
 {{fillQuestions}}
 
-## 四、计算题（每小题10分，共30分）
+## 四、计算题（每小题{{calcScore}}分，共{{calcTotal}}分）
 
 {{calcQuestions}}
 
-## 五、简答题（每小题10分，共30分）
+## 五、简答题（每小题{{essayScore}}分，共{{essayTotal}}分）
 
 {{essayQuestions}}
 

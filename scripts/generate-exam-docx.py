@@ -42,6 +42,19 @@ OPTION_MARKER_PATTERN = re.compile(r"\(([A-D])\)\s*")
 QUESTION_SECTION_PATTERN = re.compile(r"^[一二三四五六七八九十]+、")
 INLINE_MATH_PUNCT_PATTERN = re.compile(r"\$([^$\n]+)\$([，。；：,.!?）)])")
 INLINE_MATH_PATTERN = re.compile(r"\$([^$\n]+)\$")
+# 矩阵环境：$...\begin{bmatrix}1&2\\3&4\end{bmatrix}...$ 没法照搬进 Word 的纯文本模式，
+# 直接留下 \begin{...} 会让卷面出现乱码式的 LaTeX 源码。统一折成「[1, 2; 3, 4]」这类可读写法。
+MATRIX_ENV_PATTERN = re.compile(
+    r"\\begin\{((?:b|p|v|B|V)?matrix)\}(.*?)\\end\{\1\}", re.DOTALL
+)
+MATRIX_DELIMITERS = {
+    "b": ("[", "]"),
+    "p": ("(", ")"),
+    "v": ("|", "|"),
+    "B": ("{", "}"),
+    "V": ("‖", "‖"),
+    "": ("[", "]"),
+}
 SCRIPT_TOKEN_PATTERN = re.compile(
     r"([A-Za-z]+)_([A-Za-z0-9]+)|([A-Za-z0-9()]+)\^([A-Za-z0-9]+)"
 )
@@ -886,8 +899,19 @@ def normalize_math_markdown(text: str) -> str:
     return text
 
 
+def matrix_to_readable_text(expr: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        env = match.group(1).removesuffix("matrix")
+        left, right = MATRIX_DELIMITERS.get(env, ("[", "]"))
+        rows = [row.strip() for row in re.split(r"\\\\", match.group(2)) if row.strip()]
+        cells = [", ".join(cell.strip() for cell in row.split("&")) for row in rows]
+        return f"{left}{'; '.join(cells)}{right}"
+
+    return MATRIX_ENV_PATTERN.sub(repl, expr)
+
+
 def latex_inline_to_readable_text(expr: str) -> str:
-    expr = expr.strip()
+    expr = matrix_to_readable_text(expr.strip())
     for source, target in LATEX_REPLACEMENTS["latexInlineReadable"].items():
         expr = expr.replace(source, target)
 
@@ -900,9 +924,12 @@ def latex_inline_to_readable_text(expr: str) -> str:
 
 
 def replace_inline_math_with_readable_text(text: str) -> str:
-    return INLINE_MATH_PATTERN.sub(
+    converted = INLINE_MATH_PATTERN.sub(
         lambda match: latex_inline_to_readable_text(match.group(1)), text
     )
+    # normalize_math_markdown 为了稳住 pandoc 的公式解析，先在公式与中文标点之间补了空格；
+    # 公式改成纯文本后这层空格会留在「] ，」这种位置，出卷时看着像多余的空格。
+    return re.sub(r"[ \t]+([，。；：、）])", r"\1", converted)
 
 
 def rebuild_docx(docx_path: Path, work_dir: Path) -> None:

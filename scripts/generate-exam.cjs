@@ -349,6 +349,18 @@ function createExamGenerator({ bank, engine, courseCode, fillPerTopic, defaultFi
       paperVersion: spec.paperVersion,
       paperCode: spec.paperCode,
       targetMajor: spec.targetMajor,
+      // 各题型的单题分值与总分：模板里原本写死「共10分/共20分」，与实际组卷数量对不上，
+      // 试题页与答案页的分值会互相矛盾。统一由 DEFAULT_EXAM_LAYOUT 派生，两处同源。
+      singleScore: DEFAULT_EXAM_LAYOUT.singleScore,
+      singleTotal: sectionTotal(DEFAULT_EXAM_LAYOUT.singleCount, DEFAULT_EXAM_LAYOUT.singleScore),
+      judgeScore: DEFAULT_EXAM_LAYOUT.judgeScore,
+      judgeTotal: sectionTotal(DEFAULT_EXAM_LAYOUT.judgeCount, DEFAULT_EXAM_LAYOUT.judgeScore),
+      fillScore: DEFAULT_EXAM_LAYOUT.fillScore,
+      fillTotal: sectionTotal(DEFAULT_EXAM_LAYOUT.fillCount, DEFAULT_EXAM_LAYOUT.fillScore),
+      calcScore: DEFAULT_EXAM_LAYOUT.calcScore,
+      calcTotal: sectionTotal(DEFAULT_EXAM_LAYOUT.calcCount, DEFAULT_EXAM_LAYOUT.calcScore),
+      essayScore: DEFAULT_EXAM_LAYOUT.essayScore,
+      essayTotal: sectionTotal(DEFAULT_EXAM_LAYOUT.essayCount, DEFAULT_EXAM_LAYOUT.essayScore),
       singleQuestions: singleBlock,
       judgeQuestions: judgeBlock,
       fillQuestions: fillBlock,
