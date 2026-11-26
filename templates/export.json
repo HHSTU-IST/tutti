@@ -132,6 +132,11 @@
       "borderStyle": "single"
     }
   },
+  "optionLayout": {
+    "columns": 2,
+    "cellMarginTwips": 40,
+    "minFontSizeHalfPoints": 20
+  },
   "rules": {
     "titleLevel": 1,
     "sectionLevel": 2,

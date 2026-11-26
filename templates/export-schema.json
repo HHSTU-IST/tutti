@@ -132,6 +132,11 @@
       "borderStyle": null
     }
   },
+  "optionLayout": {
+    "columns": null,
+    "cellMarginTwips": null,
+    "minFontSizeHalfPoints": null
+  },
   "rules": {
     "titleLevel": null,
     "sectionLevel": null,

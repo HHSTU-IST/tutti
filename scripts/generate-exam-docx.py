@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -40,6 +41,10 @@ ET.parse = DefusedET.parse
 
 OPTION_MARKER_PATTERN = re.compile(r"\(([A-D])\)\s*")
 QUESTION_SECTION_PATTERN = re.compile(r"^[一二三四五六七八九十]+、")
+# 单选题题干末尾的答题括号：括号之间用字符间距撑开，避免被 Word 拆到两行。
+ANSWER_BLANK_GAP_TWIPS = 200
+# 估算字宽时的安全系数：宁愿多留白，也不要让估计偏窄导致选项折行。
+OPTION_WIDTH_SAFETY = 1.06
 INLINE_MATH_PUNCT_PATTERN = re.compile(r"\$([^$\n]+)\$([，。；：,.!?）)])")
 INLINE_MATH_PATTERN = re.compile(r"\$([^$\n]+)\$")
 # 矩阵环境：$...\begin{bmatrix}1&2\\3&4\end{bmatrix}...$ 没法照搬进 Word 的纯文本模式，
@@ -469,6 +474,10 @@ def rebuild_section_heading(paragraph: ET.Element, text: str) -> None:
         append_text_run(paragraph, note_text, style_cfg("sectionNote")["font"])
 
 
+def format_option(label: str, option_text: str) -> str:
+    return f"{label}.{option_text}"
+
+
 def rebuild_option_paragraph(paragraph: ET.Element, text: str, font_cfg: dict) -> bool:
     segments = parse_option_segments(text)
     if segments is None:
@@ -476,7 +485,7 @@ def rebuild_option_paragraph(paragraph: ET.Element, text: str, font_cfg: dict) -
 
     strip_runs(paragraph)
     for index, (label, option_text) in enumerate(segments):
-        merged = f"{label}.{option_text}"
+        merged = format_option(label, option_text)
         if not append_scripted_text_runs(paragraph, merged, font_cfg):
             append_text_run(paragraph, merged, font_cfg)
         if index < len(segments) - 1:
@@ -485,24 +494,141 @@ def rebuild_option_paragraph(paragraph: ET.Element, text: str, font_cfg: dict) -
     return True
 
 
-def build_option_table(segments: list[tuple[str, str]]) -> ET.Element:
-    margins = EXPORT_CONFIG["document"]["margins"]
-    page_width = EXPORT_CONFIG["document"]["pageSize"]["width"]
-    content_width = page_width - margins["left"] - margins["right"]
-    table_width = int(content_width * 0.82)
-    column_width = table_width // 2
+def estimate_text_width(text: str) -> float:
+    """按 em 估算文本宽度，用作选项分栏与字号的自适应依据。
+
+    全角字符按 1 em，半角字符按经验比例（数字/字母约 0.6 em），
+    最后乘安全系数，宁可多留白也不让估计偏窄。
+    """
+    units = 0.0
+    for char in text:
+        if char.isspace():
+            units += 0.3
+        elif unicodedata.east_asian_width(char) in {"W", "F"}:
+            units += 1.0
+        else:
+            units += 0.6
+    return units * OPTION_WIDTH_SAFETY
+
+
+def build_option_layout(groups: list[list[tuple[str, str]]]) -> dict:
+    """以全卷最长的选项为准，统一算出选项表格的栏宽与字号。
+
+    选项表格按栏位（第 1 个选项、第 2 个选项……）取全卷最大值来分配宽度，
+    这样每道题的选项分栏线都在同一位置，同时每个选项都能单行排下。
+    真的排不下时先逐级缩字号，缩到下限仍不行就退成单栏、每题占整行。
+    """
+    layout_cfg = EXPORT_CONFIG["optionLayout"]
+    document_cfg = EXPORT_CONFIG["document"]
+    content_width = (
+        document_cfg["pageSize"]["width"]
+        - document_cfg["margins"]["left"]
+        - document_cfg["margins"]["right"]
+    )
+    cell_margin = int(layout_cfg["cellMarginTwips"])
+    min_size = int(layout_cfg["minFontSizeHalfPoints"])
+    columns = max(1, int(layout_cfg["columns"]))
+    body_font = style_cfg("body")["font"]
+    body_size = body_font["sizeHalfPoints"]
+
+    def slot_units(column_count: int) -> list[float]:
+        slots = [0.0] * column_count
+        for segments in groups:
+            for index, (label, option_text) in enumerate(segments):
+                slot = index % column_count
+                slots[slot] = max(
+                    slots[slot], estimate_text_width(format_option(label, option_text))
+                )
+        return slots
+
+    def required_widths(units: list[float], size: int) -> list[float]:
+        em_twips = size * 10
+        return [value * em_twips + 2 * cell_margin for value in units]
+
+    units = slot_units(columns)
+    size = body_size
+    while size > min_size and sum(required_widths(units, size)) > content_width:
+        size -= 2
+    if sum(required_widths(units, size)) > content_width:
+        columns = 1
+        units = slot_units(columns)
+        size = body_size
+        while size > min_size and sum(required_widths(units, size)) > content_width:
+            size -= 2
+
+    required = required_widths(units, size)
+    total_required = sum(required)
+    share = content_width / columns
+    if all(need <= share for need in required):
+        # 所有选项都放得进均分栏宽时用等宽栏，卷面上分栏线更整齐。
+        widths = [int(share)] * columns
+    else:
+        spare = max(content_width - total_required, 0.0)
+        widths = [int(need + spare / columns) for need in required]
+    widths[-1] += content_width - sum(widths)
+
+    font_cfg = dict(body_font)
+    font_cfg["sizeHalfPoints"] = size
+    return {
+        "columns": columns,
+        "cellMargin": cell_margin,
+        "contentWidth": content_width,
+        "widths": widths,
+        "font": font_cfg,
+    }
+
+
+def build_option_cell(
+    label: str,
+    option_text: str,
+    width: int,
+    layout: dict,
+    *,
+    grid_span: int = 1,
+) -> ET.Element:
+    cell = ET.Element(qn("w:tc"))
+    tc_pr = ET.SubElement(cell, qn("w:tcPr"))
+
+    tc_w = ET.SubElement(tc_pr, qn("w:tcW"))
+    tc_w.set(qn("w:type"), "dxa")
+    tc_w.set(qn("w:w"), str(width))
+
+    if grid_span > 1:
+        span = ET.SubElement(tc_pr, qn("w:gridSpan"))
+        span.set(qn("w:val"), str(grid_span))
+
+    tc_borders = ET.SubElement(tc_pr, qn("w:tcBorders"))
+    for side in ("top", "left", "bottom", "right"):
+        border = ET.SubElement(tc_borders, qn(f"w:{side}"))
+        border.set(qn("w:val"), "nil")
+
+    paragraph = ET.SubElement(cell, qn("w:p"))
+    ppr = ET.SubElement(paragraph, qn("w:pPr"))
+    set_spacing(ppr, **style_cfg("body")["spacing"])
+    set_indent(ppr, left=0, first_line=0, hanging=0)
+    set_alignment(ppr, "left")
+
+    font_cfg = layout["font"]
+    text = format_option(label, option_text)
+    if not append_scripted_text_runs(paragraph, text, font_cfg):
+        append_text_run(paragraph, text, font_cfg)
+    return cell
+
+
+def build_option_table(segments: list[tuple[str, str]], layout: dict) -> ET.Element:
+    columns: int = layout["columns"]
+    content_width: int = layout["contentWidth"]
+    cell_margin: int = layout["cellMargin"]
+    widths: list[int] = layout["widths"]
+
+    rows = [segments[i : i + columns] for i in range(0, len(segments), columns)]
 
     table = ET.Element(qn("w:tbl"))
     tbl_pr = ET.SubElement(table, qn("w:tblPr"))
-    tbl_caption = ET.SubElement(tbl_pr, qn("w:tblCaption"))
-    tbl_caption.set(qn("w:val"), "option-layout")
 
     tbl_w = ET.SubElement(tbl_pr, qn("w:tblW"))
     tbl_w.set(qn("w:type"), "dxa")
-    tbl_w.set(qn("w:w"), str(table_width))
-
-    tbl_layout = ET.SubElement(tbl_pr, qn("w:tblLayout"))
-    tbl_layout.set(qn("w:type"), "fixed")
+    tbl_w.set(qn("w:w"), str(sum(widths)))
 
     tbl_jc = ET.SubElement(tbl_pr, qn("w:jc"))
     tbl_jc.set(qn("w:val"), "center")
@@ -512,36 +638,46 @@ def build_option_table(segments: list[tuple[str, str]]) -> ET.Element:
         border = ET.SubElement(tbl_borders, qn(f"w:{side}"))
         border.set(qn("w:val"), "nil")
 
+    tbl_layout = ET.SubElement(tbl_pr, qn("w:tblLayout"))
+    tbl_layout.set(qn("w:type"), "fixed")
+
+    # 单元格左右留白压到最小，把整页宽度都留给选项文字。
+    tbl_cell_mar = ET.SubElement(tbl_pr, qn("w:tblCellMar"))
+    for side, value in (
+        ("top", 0),
+        ("left", cell_margin),
+        ("bottom", 0),
+        ("right", cell_margin),
+    ):
+        node = ET.SubElement(tbl_cell_mar, qn(f"w:{side}"))
+        node.set(qn("w:w"), str(value))
+        node.set(qn("w:type"), "dxa")
+
+    tbl_caption = ET.SubElement(tbl_pr, qn("w:tblCaption"))
+    tbl_caption.set(qn("w:val"), "option-layout")
+
     tbl_grid = ET.SubElement(table, qn("w:tblGrid"))
-    for _ in range(2):
+    for width in widths:
         grid_col = ET.SubElement(tbl_grid, qn("w:gridCol"))
-        grid_col.set(qn("w:w"), str(column_width))
+        grid_col.set(qn("w:w"), str(width))
 
-    body_font = style_cfg("body")["font"]
-    for row_start in range(0, len(segments), 2):
+    for row_segments in rows:
         row = ET.SubElement(table, qn("w:tr"))
-        row_segments = segments[row_start : row_start + 2]
-        for column_index in range(2):
-            cell = ET.SubElement(row, qn("w:tc"))
-            tc_pr = ET.SubElement(cell, qn("w:tcPr"))
-            tc_w = ET.SubElement(tc_pr, qn("w:tcW"))
-            tc_w.set(qn("w:type"), "dxa")
-            tc_w.set(qn("w:w"), str(column_width))
+        tr_pr = ET.SubElement(row, qn("w:trPr"))
+        # 一行选项不允许跨页断开，避免同一题的选项被拆到两页。
+        ET.SubElement(tr_pr, qn("w:cantSplit"))
 
-            tc_borders = ET.SubElement(tc_pr, qn("w:tcBorders"))
-            for side in ("top", "left", "bottom", "right"):
-                border = ET.SubElement(tc_borders, qn(f"w:{side}"))
-                border.set(qn("w:val"), "nil")
+        if len(row_segments) == 1 and columns > 1:
+            label, option_text = row_segments[0]
+            row.append(
+                build_option_cell(
+                    label, option_text, content_width, layout, grid_span=columns
+                )
+            )
+            continue
 
-            paragraph = ET.SubElement(cell, qn("w:p"))
-            ppr = ET.SubElement(paragraph, qn("w:pPr"))
-            set_alignment(ppr, "left")
-            set_spacing(ppr, **style_cfg("body")["spacing"])
-            set_indent(ppr, left=0, first_line=0, hanging=0)
-
-            if column_index < len(row_segments):
-                label, option_text = row_segments[column_index]
-                append_text_run(paragraph, f"{label}.{option_text}", body_font)
+        for slot, (label, option_text) in enumerate(row_segments):
+            row.append(build_option_cell(label, option_text, widths[slot], layout))
 
     return table
 
@@ -629,15 +765,72 @@ def patch_document_relationships(rels_path: Path) -> str:
 
 
 def replace_option_paragraphs(body: ET.Element) -> None:
+    targets: list[tuple[ET.Element, list[tuple[str, str]]]] = []
     for child in list(body):
         if child.tag != qn("w:p"):
             continue
         segments = parse_option_segments(paragraph_text(child))
         if segments is None:
             continue
-        insert_at = list(body).index(child)
-        body.insert(insert_at, build_option_table(segments))
-        body.remove(child)
+        targets.append((child, segments))
+
+    if not targets:
+        return
+
+    # 全卷共用一个栏宽/字号，选项的分栏线才能对齐。
+    layout = build_option_layout([segments for _, segments in targets])
+    for paragraph, segments in targets:
+        insert_at = list(body).index(paragraph)
+        body.insert(insert_at, build_option_table(segments, layout))
+        body.remove(paragraph)
+
+
+def set_keep_with_next(paragraph: ET.Element) -> None:
+    """题干与紧随其后的选项表格同页，避免题干留在上一页底部、选项被挤到下一页。"""
+    ppr = ensure_ppr(paragraph)
+    if ppr.find("w:keepNext", NS) is not None:
+        return
+    # pPr 的子元素有固定顺序，keepNext 只能排在 pStyle 之后、其余元素之前。
+    keep_next = ET.Element(qn("w:keepNext"))
+    ppr.insert(1 if ppr.find("w:pStyle", NS) is not None else 0, keep_next)
+
+
+def append_answer_blank(paragraph: ET.Element, font_cfg: dict) -> None:
+    """在题干末尾追加答题括号。
+
+    “（　）”中间的全角空格是可断行位置，Word 会把“（”留在上一行、把“）”折到
+    下一行。这里用两个紧邻的括号靠字符间距把空隙撑开，括号就不会被拆开。
+    """
+    left = ET.SubElement(paragraph, qn("w:r"))
+    apply_run_format(left, font_cfg)
+    char_spacing = ET.SubElement(ensure_rpr(left), qn("w:spacing"))
+    char_spacing.set(qn("w:val"), str(ANSWER_BLANK_GAP_TWIPS))
+    ET.SubElement(left, qn("w:t")).text = "（"
+
+    right = ET.SubElement(paragraph, qn("w:r"))
+    apply_run_format(right, font_cfg)
+    ET.SubElement(right, qn("w:t")).text = "）"
+
+
+def patch_choice_questions(body: ET.Element) -> None:
+    """给单选题题干补答题括号，并让题干与选项固定同页。
+
+    选项表格紧跟在题干段落后面，用它当作题型判定条件，答案卷里的
+    “1. B 2. C ...”（后面没有选项表）不会被误加括号。
+    """
+    children = list(body)
+    font_cfg = style_cfg("body")["font"]
+    for index, child in enumerate(children[:-1]):
+        if child.tag != qn("w:p"):
+            continue
+        following = children[index + 1]
+        if following.tag != qn("w:tbl") or not is_option_table(following):
+            continue
+        set_keep_with_next(child)
+        text = paragraph_text(child)
+        if not text or text.endswith(("）", ")")):
+            continue
+        append_answer_blank(child, font_cfg)
 
 
 def materialize_question_numbers(body: ET.Element) -> None:
@@ -874,9 +1067,22 @@ def patch_document(document_path: Path, footer_rel_id: str) -> None:
     materialize_question_numbers(body)
     replace_option_paragraphs(body)
 
+    # 选项单元格的字体/字号在生成表格时已按“不折行”算好，别再被正文样式覆盖。
+    option_paragraphs = {
+        id(paragraph)
+        for table in body.findall(".//w:tbl", NS)
+        if is_option_table(table)
+        for paragraph in table.findall(".//w:p", NS)
+    }
+
     heading1_index = 0
     for paragraph in body.findall(".//w:p", NS):
+        if id(paragraph) in option_paragraphs:
+            continue
         heading1_index = patch_paragraph(paragraph, heading1_index)
+
+    # 括号要带上字符间距，必须放在正文格式化之后追加，否则会被 strip_runs 抹掉。
+    patch_choice_questions(body)
 
     patch_tables(body)
 
