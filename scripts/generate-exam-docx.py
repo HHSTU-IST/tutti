@@ -585,6 +585,7 @@ def build_option_cell(
     layout: dict,
     *,
     grid_span: int = 1,
+    keep_with_next: bool = False,
 ) -> ET.Element:
     cell = ET.Element(qn("w:tc"))
     tc_pr = ET.SubElement(cell, qn("w:tcPr"))
@@ -604,6 +605,9 @@ def build_option_cell(
 
     paragraph = ET.SubElement(cell, qn("w:p"))
     ppr = ET.SubElement(paragraph, qn("w:pPr"))
+    if keep_with_next:
+        # 单元格段落设了 keepNext，整张选项表格就不会被分页拆成两半。
+        ET.SubElement(ppr, qn("w:keepNext"))
     set_spacing(ppr, **style_cfg("body")["spacing"])
     set_indent(ppr, left=0, first_line=0, hanging=0)
     set_alignment(ppr, "left")
@@ -661,23 +665,38 @@ def build_option_table(segments: list[tuple[str, str]], layout: dict) -> ET.Elem
         grid_col = ET.SubElement(tbl_grid, qn("w:gridCol"))
         grid_col.set(qn("w:w"), str(width))
 
-    for row_segments in rows:
+    for row_index, row_segments in enumerate(rows):
         row = ET.SubElement(table, qn("w:tr"))
         tr_pr = ET.SubElement(row, qn("w:trPr"))
         # 一行选项不允许跨页断开，避免同一题的选项被拆到两页。
         ET.SubElement(tr_pr, qn("w:cantSplit"))
+        # 除最后一行外都保持与下一行同页，整题的四个选项就不会分处两页。
+        keep_with_next = row_index < len(rows) - 1
 
         if len(row_segments) == 1 and columns > 1:
             label, option_text = row_segments[0]
             row.append(
                 build_option_cell(
-                    label, option_text, content_width, layout, grid_span=columns
+                    label,
+                    option_text,
+                    content_width,
+                    layout,
+                    grid_span=columns,
+                    keep_with_next=keep_with_next,
                 )
             )
             continue
 
         for slot, (label, option_text) in enumerate(row_segments):
-            row.append(build_option_cell(label, option_text, widths[slot], layout))
+            row.append(
+                build_option_cell(
+                    label,
+                    option_text,
+                    widths[slot],
+                    layout,
+                    keep_with_next=keep_with_next,
+                )
+            )
 
     return table
 
